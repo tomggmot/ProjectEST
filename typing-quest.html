@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Typing Quest</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 1rem; }
+#game { width: 100%; max-width: 640px; }
+
+.scene { background: #1a1a2e; border-radius: 12px; margin-bottom: 1rem; overflow: hidden; position: relative; }
+canvas#arena { display: block; width: 100%; height: 130px; }
+.toast { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); background: #3C3489; color: #EEEDFE; font-size: 12px; font-weight: 500; padding: 3px 12px; border-radius: 99px; opacity: 0; transition: opacity 0.2s; white-space: nowrap; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+.hud-row { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px; margin-bottom: 1rem; }
+.hud-cell { background: #f0ede8; border-radius: 8px; padding: 0.6rem 0.5rem; text-align: center; }
+.hud-label { font-size: 11px; color: #888780; margin-bottom: 3px; }
+.hud-val { font-size: 18px; font-weight: 500; color: #2C2C2A; }
+.hud-val.green { color: #0F6E56; }
+.hud-val.amber { color: #BA7517; }
+.hearts { display: flex; gap: 4px; justify-content: center; }
+.heart { width: 16px; height: 16px; }
+.heart svg { width: 16px; height: 16px; }
+
+.save-indicator { font-size: 11px; color: #888780; text-align: center; margin-bottom: 0.5rem; min-height: 16px; transition: opacity 0.3s; }
+.save-indicator.saving { color: #1D9E75; }
+
+.lesson-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 1.1rem; margin-bottom: 0.75rem; }
+.lesson-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.lesson-badge { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 99px; }
+.badge-practice { background: #E1F5EE; color: #085041; }
+.badge-test { background: #FCEBEB; color: #791F1F; }
+.badge-num { background: #EEEDFE; color: #26215C; }
+.lesson-title { font-size: 14px; font-weight: 500; color: #2C2C2A; }
+.lesson-desc { font-size: 12px; color: #5F5E5A; margin-bottom: 8px; line-height: 1.5; }
+.pass-req { font-size: 11px; font-weight: 500; color: #854F0B; background: #FAEEDA; padding: 2px 9px; border-radius: 99px; display: inline-block; margin-bottom: 8px; }
+
+.kb-wrap { margin-bottom: 8px; }
+.kb-row { display: flex; gap: 3px; justify-content: center; margin-bottom: 3px; }
+.key { width: 25px; height: 25px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 500; border: 0.5px solid rgba(0,0,0,0.15); background: #f0ede8; color: #888780; position: relative; flex-shrink: 0; }
+.key.home { background: #EEEDFE; color: #3C3489; border-color: #AFA9EC; }
+.key.target { background: #7F77DD; color: #EEEDFE; border-color: #534AB7; }
+.key.above { background: #E1F5EE; color: #085041; border-color: #5DCAA5; }
+.key.below { background: #FAEEDA; color: #633806; border-color: #EF9F27; }
+.key.shift-key { background: #FAECE7; color: #712B13; border-color: #D85A30; font-size: 8px; width: 36px; }
+.key.bump::after { content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:3px; height:2px; border-radius:1px; background:#AFA9EC; }
+.key.target.bump::after { background:#EEEDFE; }
+
+.word-display { text-align: center; font-size: 26px; font-weight: 500; letter-spacing: 4px; min-height: 34px; margin-bottom: 5px; font-family: "Courier New", monospace; }
+.ch { display: inline-block; }
+.ch.done { color: #0F6E56; }
+.ch.active { color: #7F77DD; border-bottom: 2px solid #7F77DD; }
+.ch.wrong { color: #E24B4A; }
+.ch.pending { color: #B4B2A9; }
+
+.timer-track { width: 100%; height: 5px; background: #e8e5e0; border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
+.timer-fill { height: 100%; border-radius: 3px; }
+.timer-label { text-align: center; font-size: 12px; font-weight: 500; color: #888780; margin-bottom: 4px; min-height: 16px; }
+.timer-label.urgent { color: #E24B4A; }
+
+.progress-dots { display: flex; gap: 5px; justify-content: center; margin-bottom: 6px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #D3D1C7; }
+.dot.done { background: #1D9E75; }
+.dot.active { background: #7F77DD; }
+.dot.fail { background: #E24B4A; }
+.dot.test-active { background: #E24B4A; }
+
+.phase-track { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.phase-pip { font-size: 11px; padding: 2px 8px; border-radius: 99px; border: 0.5px solid rgba(0,0,0,0.15); color: #888780; background: #f0ede8; }
+.phase-pip.practice-active { background: #E1F5EE; color: #085041; border-color: #5DCAA5; font-weight: 500; }
+.phase-pip.test-active { background: #FCEBEB; color: #791F1F; border-color: #F09595; font-weight: 500; }
+.phase-pip.complete { color: #1D9E75; border-color: #5DCAA5; }
+.phase-arrow { font-size: 10px; color: #B4B2A9; }
+
+.input-row { display: flex; gap: 8px; margin-bottom: 0.75rem; }
+.typing-input { flex: 1; font-size: 20px; letter-spacing: 3px; padding: 0.45rem 0.75rem; text-align: center; border: 2px solid rgba(0,0,0,0.15); border-radius: 8px; background: #fff; color: #2C2C2A; outline: none; font-family: "Courier New", monospace; }
+.typing-input:focus { border-color: #7F77DD; }
+.typing-input.ok { border-color: #1D9E75; }
+.typing-input.bad { border-color: #E24B4A; }
+
+.feedback-bar { text-align: center; font-size: 13px; font-weight: 500; min-height: 20px; color: #888780; margin-bottom: 0.5rem; }
+.feedback-bar.win { color: #0F6E56; }
+.feedback-bar.lose { color: #E24B4A; }
+
+.xp-wrap { background: #f0ede8; border-radius: 8px; padding: 0.45rem 1rem; display: flex; align-items: center; gap: 10px; }
+.xp-track { flex: 1; height: 7px; background: #D3D1C7; border-radius: 4px; overflow: hidden; }
+.xp-bar { height: 100%; background: #7F77DD; border-radius: 4px; transition: width 0.4s; }
+.xp-label { font-size: 11px; color: #888780; white-space: nowrap; }
+
+.overlay { background: #f0ede8; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 1.4rem; text-align: center; }
+.overlay h2 { font-size: 19px; font-weight: 500; color: #2C2C2A; margin-bottom: 0.35rem; }
+.overlay p { font-size: 13px; color: #5F5E5A; margin-bottom: 0.9rem; }
+.btn-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.overlay button { font-size: 13px; font-weight: 500; padding: 0.45rem 1.2rem; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; background: #7F77DD; color: #EEEDFE; cursor: pointer; }
+.overlay button:hover { background: #534AB7; }
+.overlay button.retry { background: #D85A30; }
+.overlay button.retry:hover { background: #993C1D; }
+.overlay button.secondary { background: transparent; color: #888780; border-color: rgba(0,0,0,0.15); }
+.overlay button.secondary:hover { background: #fff; }
+.overlay button.danger { background: #A32D2D; }
+.overlay button.danger:hover { background: #791F1F; }
+.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1rem; }
+.stat-item { background: #fff; border-radius: 8px; padding: 0.45rem; }
+.stat-item .n { font-size: 19px; font-weight: 500; color: #2C2C2A; }
+.stat-item .l { font-size: 11px; color: #888780; }
+.fail-banner { background: #FCEBEB; border: 0.5px solid #F09595; border-radius: 8px; padding: 0.5rem 0.9rem; margin-bottom: 0.9rem; font-size: 12px; color: #791F1F; font-weight: 500; }
+.pass-banner { background: #E1F5EE; border: 0.5px solid #5DCAA5; border-radius: 8px; padding: 0.5rem 0.9rem; margin-bottom: 0.9rem; font-size: 12px; color: #04342C; font-weight: 500; }
+
+.word-area { background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 1.1rem; margin-bottom: 0.75rem; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.enemy-tag { font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 99px; }
+.tag-goblin{background:#E1F5EE;color:#085041}.tag-orc{background:#FAEEDA;color:#633806}.tag-wizard{background:#EEEDFE;color:#26215C}.tag-dragon{background:#FAECE7;color:#712B13}.tag-boss{background:#FCEBEB;color:#791F1F}.tag-titan{background:#E6F1FB;color:#042C53}.tag-phoenix{background:#FAEEDA;color:#412402}.tag-void{background:#2C2C2A;color:#D3D1C7;border:0.5px solid #5F5E5A}
+.combat-word { font-size: 30px; font-weight: 500; letter-spacing: 3px; color: #2C2C2A; min-height: 38px; font-family: "Courier New", monospace; }
+.flavor { font-size: 12px; color: #888780; font-style: italic; }
+
+.para-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 1.1rem; margin-bottom: 0.75rem; }
+.para-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.para-badge { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: 99px; background: #2C2C2A; color: #D3D1C7; }
+.para-title { font-size: 14px; font-weight: 500; color: #2C2C2A; }
+.para-meta { display: flex; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.para-stat { font-size: 11px; color: #888780; }
+.para-stat span { font-weight: 500; color: #2C2C2A; }
+.para-display { font-size: 14px; line-height: 1.9; font-family: "Courier New", monospace; letter-spacing: 0.5px; margin-bottom: 8px; word-break: break-all; }
+.para-ch { display: inline; }
+.para-ch.done { color: #0F6E56; }
+.para-ch.active { color: #7F77DD; border-bottom: 1.5px solid #7F77DD; }
+.para-ch.wrong { color: #E24B4A; text-decoration: underline; }
+.para-ch.pending { color: #B4B2A9; }
+.para-ch.space-wrong { background: #F09595; border-radius: 2px; }
+.para-input { width: 100%; font-size: 15px; padding: 0.5rem 0.75rem; border: 2px solid rgba(0,0,0,0.15); border-radius: 8px; background: #fff; color: #2C2C2A; outline: none; font-family: "Courier New", monospace; }
+.para-input:focus { border-color: #7F77DD; }
+.para-input.ok { border-color: #1D9E75; }
+.para-input.bad { border-color: #E24B4A; }
+.live-stats { display: flex; gap: 12px; justify-content: center; margin-bottom: 6px; flex-wrap: wrap; }
+.live-stat { font-size: 12px; color: #888780; }
+.live-stat span { font-weight: 500; color: #2C2C2A; }
+.live-stat span.green { color: #0F6E56; }
+.live-stat span.red { color: #E24B4A; }
+.live-stat span.amber { color: #BA7517; }
+.accuracy-bar-wrap { margin-bottom: 6px; }
+.accuracy-bar-track { height: 4px; background: #e8e5e0; border-radius: 2px; overflow: hidden; }
+.accuracy-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; }
+
+.progress-screen { background: #fff; border: 0.5px solid rgba(0,0,0,0.12); border-radius: 12px; padding: 1.4rem; margin-bottom: 0.75rem; }
+.progress-screen h2 { font-size: 18px; font-weight: 500; color: #2C2C2A; margin-bottom: 1rem; }
+.lesson-progress-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 0.5px solid rgba(0,0,0,0.08); font-size: 13px; }
+.lesson-progress-row:last-child { border-bottom: none; }
+.lp-name { flex: 1; color: #2C2C2A; }
+.lp-badge { font-size: 10px; font-weight: 500; padding: 1px 7px; border-radius: 99px; }
+.lp-done { background: #E1F5EE; color: #085041; }
+.lp-inprog { background: #EEEDFE; color: #26215C; }
+.lp-locked { background: #f0ede8; color: #888780; }
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="scene">
+    <canvas id="arena" height="130"></canvas>
+    <div class="toast" id="toast"></div>
+  </div>
+  <div class="hud-row">
+    <div class="hud-cell"><div class="hud-label">Stage</div><div class="hud-val" id="hud-wave">L1</div></div>
+    <div class="hud-cell"><div class="hud-label">Score</div><div class="hud-val" id="hud-score">0</div></div>
+    <div class="hud-cell"><div class="hud-label">Streak</div><div class="hud-val" id="hud-streak">0</div></div>
+    <div class="hud-cell"><div class="hud-label">WPM</div><div class="hud-val" id="hud-wpm">—</div></div>
+    <div class="hud-cell"><div class="hud-label">HP</div><div class="hearts" id="hud-hearts"></div></div>
+  </div>
+  <div class="save-indicator" id="save-indicator"></div>
+  <div id="play-area"></div>
+</div>
+
+<script>
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const TEST_TIME_LIMIT = 5000;
+const PASS_THRESHOLD = 3;
+const PASS_ACCURACY = 90;
+const PASS_WPM = 20;
+const MAX_HP = 3;
+const WORDS_PER_WAVE = 5;
+const SAVE_KEY = "typing-quest-save";
+
+const LESSONS = [
+  {id:1,badge:"Lesson 1",title:"Home row — left hand",desc:"Rest your left fingers on A S D F. Feel the bump on F. Don't look at the keys!",highlight:{a:"target",s:"target",d:"target",f:"target"},seqChars:["a","s","d","f"],practiceLen:5,practiceRounds:4,testLen:7,testRounds:5,timeLimit:5000},
+  {id:2,badge:"Lesson 2",title:"Home row — right hand",desc:"Rest your right fingers on J K L ;. Feel the bump on J.",highlight:{j:"target",k:"target",l:"target",";":"target"},seqChars:["j","k","l",";"],practiceLen:5,practiceRounds:4,testLen:7,testRounds:5,timeLimit:5000},
+  {id:3,badge:"Lesson 3",title:"Full home row",desc:"Both hands on home row. Keep fingers anchored — reach and return.",highlight:{a:"target",s:"target",d:"target",f:"target",j:"target",k:"target",l:"target",";":"target"},seqChars:["a","s","d","f","j","k","l"],practiceLen:6,practiceRounds:4,testLen:8,testRounds:5,timeLimit:6000},
+  {id:4,badge:"Lesson 4",title:"Left hand — top row",desc:"Reach up from A S D F to Q W E R T. Return home after each key.",highlight:{q:"above",w:"above",e:"above",r:"above",t:"above",a:"home",s:"home",d:"home",f:"home"},seqChars:["q","w","e","r","t","a","s","d","f"],practiceLen:6,practiceRounds:4,testLen:8,testRounds:5,timeLimit:6000},
+  {id:5,badge:"Lesson 5",title:"Right hand — top row",desc:"Reach up from J K L ; to Y U I O P. Return home after each key.",highlight:{y:"above",u:"above",i:"above",o:"above",p:"above",j:"home",k:"home",l:"home",";":"home"},seqChars:["y","u","i","o","p","j","k","l"],practiceLen:6,practiceRounds:4,testLen:8,testRounds:5,timeLimit:6000},
+  {id:6,badge:"Lesson 6",title:"Left hand — bottom row",desc:"Reach down from A S D F to Z X C V B. Keep wrists relaxed.",highlight:{z:"below",x:"below",c:"below",v:"below",b:"below",a:"home",s:"home",d:"home",f:"home"},seqChars:["z","x","c","v","b","a","s","d"],practiceLen:6,practiceRounds:4,testLen:8,testRounds:5,timeLimit:6000},
+  {id:7,badge:"Lesson 7",title:"Right hand — bottom row",desc:"Reach down from J K L ; to N M , . /. Curl your fingers down.",highlight:{n:"below",m:"below",j:"home",k:"home",l:"home",";":"home"},seqChars:["n","m","j","k","l","n","m"],practiceLen:6,practiceRounds:4,testLen:8,testRounds:5,timeLimit:6000},
+  {id:8,badge:"Lesson 8",title:"All rows — no shift",desc:"All three rows combined. Focus on accuracy first.",highlight:{},seqChars:["a","s","d","f","j","k","l","q","w","e","r","t","y","u","i","z","x","c","v","n","m"],practiceLen:7,practiceRounds:4,testLen:9,testRounds:5,timeLimit:7000},
+  {id:9,badge:"Lesson 9",title:"Shift — left hand capitals",desc:"Use RIGHT shift + left hand keys for capitals. Right pinky holds Shift.",highlight:{},seqChars:["A","S","D","F","Q","W","E","R","a","s","d","f"],practiceLen:5,practiceRounds:4,testLen:7,testRounds:5,timeLimit:7000,shiftLesson:true},
+  {id:10,badge:"Lesson 10",title:"Shift — right hand capitals",desc:"Use LEFT shift + right hand keys. Left pinky holds Shift.",highlight:{},seqChars:["J","K","L","Y","U","I","O","j","k","l"],practiceLen:5,practiceRounds:4,testLen:7,testRounds:5,timeLimit:7000,shiftLesson:true},
+  {id:11,badge:"Lesson 11",title:"Mixed case words",desc:"Real words with capital first letters. Touch typing in action!",highlight:{},wordList:["Ask","Sad","Fad","Jab","Lad","Flag","Dark","Silk","Yell","Quilt","Shelf","Crimp"],practiceRounds:4,testRounds:5,timeLimit:6000,wordMode:true},
+  {id:12,badge:"Lesson 12",title:"Graduation — full keyboard",desc:"Everything combined. Complete this to unlock Combat mode!",highlight:{},wordList:["swift","brave","gloom","crisp","plank","dwarf","blaze","jazzy","exist","quirk","frost","glyph"],practiceRounds:4,testRounds:5,timeLimit:5000,wordMode:true},
+];
+
+const PARAGRAPHS = [
+  "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump! The five boxing wizards jump quickly.",
+  "Sphinx of black quartz, judge my vow. Two driven jocks help fax my big quiz. Quick zephyrs blow, vexing daft Jim. Amazingly few discotheques provide jukeboxes.",
+  "We promptly judged antique ivory buckles for the next prize. A mad boxer shot a quick gloved jab to the jaw of his dizzy opponent. The job requires extra pluck and zeal.",
+  "Just keep examining every low bid quoted for zinc etchings. How quickly daft jumping zebras vex. Sixty zippers were quickly picked from the woven jute bag.",
+  "A quart jar of oil mixed with zinc oxide makes a very bright paint. The five boxing wizards jump quickly. Pack my box with five dozen liquor jugs. Sphinx of black quartz.",
+];
+
+const ENEMIES = [
+  {name:"Goblin",tag:"tag-goblin",timeLimit:4000,flavor:["It gibbers and lunges!","A sneaky little blighter!","Mind its claws!"]},
+  {name:"Orc",tag:"tag-orc",timeLimit:3500,flavor:["It raises its club!","WAAAGH!","It charges forward!"]},
+  {name:"Dark Wizard",tag:"tag-wizard",timeLimit:3000,flavor:["It casts a hex!","Arcane energy crackles!","Spell incoming!"]},
+  {name:"Dragon",tag:"tag-dragon",timeLimit:2500,flavor:["It breathes fire!","ROAAAAR!","Wings beat the air!"]},
+  {name:"Lich King",tag:"tag-boss",timeLimit:2000,flavor:["Death approaches...","Bow before the Lich!","The undead stir!"]},
+  {name:"Iron Titan",tag:"tag-titan",timeLimit:1800,flavor:["Metal fists pound the earth!","Its armour is impenetrable!","CLANK!"]},
+  {name:"Phoenix Lord",tag:"tag-phoenix",timeLimit:1600,flavor:["It rises from the ashes!","Feathers of pure flame!","The sky burns!"]},
+  {name:"Void Wraith",tag:"tag-void",timeLimit:1400,flavor:["Reality tears apart...","It feeds on your fear!","Darkness consumes all!"]},
+  {name:"Ancient Hydra",tag:"tag-boss",timeLimit:1200,flavor:["Three heads strike at once!","It regenerates!","HISSSSS!"]},
+  {name:"Chaos God",tag:"tag-void",timeLimit:1000,flavor:["ORDER IS UNDONE!","The world unravels!","You cannot win..."]},
+];
+
+const COMBAT_WORDS = [
+  ["cat","dog","hat","run","sun","big","map","cup","web","sky"],
+  ["jump","frog","ship","plan","tree","blue","fish","gift","desk","lamp"],
+  ["quick","flame","storm","brave","climb","frost","blaze","magic","swift","crisp"],
+  ["spring","branch","bridge","candle","castle","farmer","garden","jacket","jungle","rabbit"],
+  ["adventure","beautiful","carefully","dangerous","elephant","fantastic","jellyfish","knowledge","lightning","mysterious"],
+  ["Acknowledge","Beneficial","Circumstance","Dilapidated","Exasperated","Fundamental","Gesticulate","Hibernation","Illustrious","Jackhammer"],
+  ["Kaleidoscope","Labyrinthine","Manipulation","Nonchalantly","Occasionally","Paraphernalia","Questionable","Recreational","Scrupulously","Theatrically"],
+  ["extraordinary","uncomfortable","responsibilities","unfortunately","approximately","simultaneously","characteristics","administrator","communication","transportation"],
+  ["Anthropomorphic","Biodegradable","Cardiovascular","Disenfranchised","Electromagnetic","Fundamentalism","Gastroenterology","Hyperventilate","Interconnected","Juxtaposition"],
+  ["antidisestablishmentarianism","Supercalifragilistic","Pneumonoultramicroscopic","Sesquipedalian","Counterintuitive","Misrepresentation","Accomplishment","Indestructible","Unconditionally","Floccinaucinihilipilification"],
+];
+
+const TITLES = ["Apprentice","Spellcaster","Mage","Archmage","Champion","Legend","Mythic","Godlike"];
+const XP_THRESH = [0,80,180,320,500,720,1000,1400,99999];
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let S = newState();
+let countdownInterval=null, wpmInterval=null, animFrame=null, toastTimer=null, saveTimer=null;
+let paraStartTime=null, paraTyped="", paraErrors=0, paraTotalKeystrokes=0;
+
+function newState() {
+  return {
+    phase:"lesson", lessonIndex:0, subPhase:"practice", practicePass:0,
+    roundIndex:0, currentSeq:"", wordStart:null, failed:false, locked:false,
+    wave:1, score:0, streak:0, totalWords:0, xp:0, level:0, hp:MAX_HP,
+    wordIndex:0, waveWords:[], recentWpms:[], bestWpm:0,
+    particles:[], enemyX:0, heroAnim:0, enemyAnim:0,
+    lessonResults:[], retryCount:0, paraIndex:0, paraAttempt:0,
+    // Persistent progress tracking
+    completedLessons:[], // array of lesson ids that have been passed
+    highScore:0, totalWordsEver:0,
+  };
+}
+
+// ─── LOCALSTORAGE PERSISTENCE ─────────────────────────────────────────────────
+function saveProgress() {
+  try {
+    const saveData = {
+      version: 1,
+      timestamp: Date.now(),
+      lessonIndex: S.lessonIndex,
+      subPhase: S.subPhase,
+      practicePass: S.practicePass,
+      phase: S.phase === "lesson" ? "lesson" : S.phase === "combat" ? "combat" : "lesson",
+      wave: S.wave,
+      score: S.score,
+      xp: S.xp,
+      level: S.level,
+      bestWpm: S.bestWpm,
+      totalWordsEver: S.totalWordsEver + S.totalWords,
+      highScore: Math.max(S.highScore, S.score),
+      completedLessons: S.completedLessons,
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(saveData));
+    showSaveIndicator("Progress saved");
+  } catch(e) {
+    console.warn("Save failed:", e);
+  }
+}
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data.version !== 1) return null;
+    return data;
+  } catch(e) {
+    return null;
+  }
+}
+
+function applySave(data) {
+  S.lessonIndex = data.lessonIndex || 0;
+  S.subPhase = "practice"; // always restart at practice on resume
+  S.practicePass = 0;
+  S.phase = "lesson";
+  S.wave = data.wave || 1;
+  S.score = data.score || 0;
+  S.xp = data.xp || 0;
+  S.level = data.level || 0;
+  S.bestWpm = data.bestWpm || 0;
+  S.totalWordsEver = data.totalWordsEver || 0;
+  S.highScore = data.highScore || 0;
+  S.completedLessons = data.completedLessons || [];
+  // if they were in combat, resume at that wave
+  if (data.phase === "combat") {
+    S.phase = "combat";
+    S.wave = data.wave || 1;
+    S.hp = MAX_HP;
+    S.waveWords = pickWaveWords(S.wave);
+    S.wordIndex = 0;
+  }
+}
+
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveProgress, 1500);
+}
+
+function showSaveIndicator(msg) {
+  const el = document.getElementById("save-indicator");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "save-indicator saving";
+  setTimeout(() => { el.className = "save-indicator"; el.textContent = ""; }, 2000);
+}
+
+function clearSave() {
+  localStorage.removeItem(SAVE_KEY);
+  showSaveIndicator("Progress cleared");
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function clearTimers() { clearInterval(countdownInterval); clearInterval(wpmInterval); countdownInterval=null; wpmInterval=null; }
+function getEnemy(w) { return ENEMIES[Math.min(w-1, ENEMIES.length-1)]; }
+function getCombatWords(w) { return COMBAT_WORDS[Math.min(w-1, COMBAT_WORDS.length-1)]; }
+function getTimeLimit(w) { return Math.max(800, getEnemy(w).timeLimit - Math.max(0,(w-1)*30)); }
+function pickWaveWords(w) { return [...getCombatWords(w)].sort(()=>Math.random()-0.5).slice(0,WORDS_PER_WAVE); }
+function makeSeq(chars,len) { let r=""; for(let i=0;i<len;i++) r+=chars[Math.floor(Math.random()*chars.length)]; return r; }
+
+// ─── CANVAS ───────────────────────────────────────────────────────────────────
+const canvas = document.getElementById("arena");
+const ctx = canvas.getContext("2d");
+function resizeCanvas() { canvas.width = canvas.offsetWidth; canvas.height = 130; }
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+function drawScene() {
+  const W=canvas.width, H=canvas.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#1a1a2e"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#16213e"; ctx.fillRect(0,H-26,W,26);
+  for(let i=0;i<40;i++){
+    const sx=((i*137+17)%W), sy=((i*83+11)%(H-30));
+    ctx.fillStyle=i%5===0?"#AFA9EC":"#444441";
+    ctx.beginPath(); ctx.arc(sx,sy,i%3===0?1.5:1,0,Math.PI*2); ctx.fill();
+  }
+  const hBob = Math.sin(S.heroAnim*0.05)*2;
+  drawHero(52, H-26+hBob);
+  if (S.phase==="combat"||S.phase==="wave_clear") { const eBob=Math.sin(S.enemyAnim*0.08)*3; drawEnemy(S.enemyX,H-26+eBob,getEnemy(S.wave)); }
+  else if (S.phase==="paragraph") drawParaScene(W,H);
+  else drawKeyboardHint(W,H);
+  S.particles = S.particles.filter(p=>p.life>0);
+  for(const p of S.particles){
+    ctx.globalAlpha=p.life/p.maxLife; ctx.fillStyle=p.color;
+    ctx.font=p.size+"px sans-serif"; ctx.fillText(p.text,p.x,p.y);
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.15; p.life--;
+  }
+  ctx.globalAlpha=1; S.heroAnim++; S.enemyAnim++;
+  animFrame = requestAnimationFrame(drawScene);
+}
+
+function drawParaScene(W,H) {
+  ctx.fillStyle="#26215C"; ctx.fillRect(W/2-40,H-80,80,50);
+  ctx.fillStyle="#AFA9EC"; ctx.beginPath(); ctx.arc(W/2,H-80,14,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#EEEDFE"; ctx.font="bold 11px sans-serif"; ctx.textAlign="center";
+  ctx.fillText("FINAL",W/2,H-74); ctx.fillText("TEST",W/2,H-63); ctx.textAlign="left";
+  for(let i=0;i<6;i++){
+    const x=W*0.1+i*(W*0.14), y=H-55+(i%2)*8;
+    ctx.fillStyle=i%3===0?"#FAC775":i%3===1?"#7F77DD":"#E24B4A";
+    ctx.beginPath(); ctx.arc(x,y,3,0,Math.PI*2); ctx.fill();
+  }
+}
+
+function drawKeyboardHint(W,H) {
+  const lesson = LESSONS[S.lessonIndex]; if(!lesson) return;
+  const keys = ["a","s","d","f","_","j","k","l",";"];
+  const startX = W/2-58, y = H-44;
+  ctx.font="500 10px sans-serif"; ctx.textAlign="center";
+  keys.forEach((k,i)=>{
+    if(k==="_") return;
+    const x = startX+i*13+(i>=5?5:0);
+    const hl = lesson.highlight&&lesson.highlight[k];
+    ctx.fillStyle=hl==="target"?"#7F77DD":hl==="above"?"#1D9E75":hl==="below"?"#EF9F27":"#2C2C2A";
+    ctx.fillRect(x-5,y-9,11,12); ctx.fillStyle=hl?"#EEEDFE":"#888780";
+    ctx.fillText(k.toUpperCase(),x+0.5,y+1);
+    if(k==="f"||k==="j"){ctx.fillStyle="#EEEDFE"; ctx.fillRect(x-1,y+2,3,2);}
+  });
+  ctx.textAlign="left";
+}
+
+function drawHero(x,y) {
+  ctx.fillStyle="#7F77DD"; ctx.beginPath(); ctx.arc(x,y-22,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#AFA9EC"; ctx.fillRect(x-6,y-14,12,15);
+  ctx.fillStyle="#7F77DD"; ctx.fillRect(x-11,y-12,6,10); ctx.fillRect(x+5,y-12,6,10);
+  ctx.fillStyle="#AFA9EC"; ctx.fillRect(x-3,y-1,4,10); ctx.fillRect(x,y-1,4,10);
+  ctx.fillStyle="#EF9F27"; ctx.fillRect(x+7,y-16,3,13);
+  ctx.beginPath(); ctx.arc(x+8,y-21,4,0,Math.PI*2); ctx.fillStyle="#FAC775"; ctx.fill();
+}
+
+function drawEnemy(x,y,enemy) {
+  const C={
+    "tag-goblin":{body:"#639922",skin:"#97C459"},"tag-orc":{body:"#3B6D11",skin:"#639922"},
+    "tag-wizard":{body:"#534AB7",skin:"#AFA9EC"},"tag-dragon":{body:"#993C1D",skin:"#D85A30"},
+    "tag-boss":{body:"#2C2C2A",skin:"#888780"},"tag-titan":{body:"#185FA5",skin:"#85B7EB"},
+    "tag-phoenix":{body:"#854F0B",skin:"#EF9F27"},"tag-void":{body:"#26215C",skin:"#7F77DD"},
+  }[enemy.tag]||{body:"#639922",skin:"#97C459"};
+  ctx.fillStyle=C.skin; ctx.beginPath(); ctx.arc(x,y-20,9,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=C.body; ctx.fillRect(x-7,y-11,14,14);
+  ctx.fillStyle=C.skin; ctx.fillRect(x-11,y-9,6,9); ctx.fillRect(x+5,y-9,6,9);
+  ctx.fillRect(x-3,y,4,10); ctx.fillRect(x,y,4,10);
+  if(enemy.tag==="tag-boss"||enemy.tag==="tag-void"){ctx.fillStyle="#E24B4A"; ctx.fillRect(x-3,y-29,7,6); ctx.fillRect(x-6,y-33,13,4);}
+  if(enemy.tag==="tag-dragon"||enemy.tag==="tag-phoenix"){
+    ctx.fillStyle=enemy.tag==="tag-phoenix"?"#EF9F27":"#F0997B";
+    ctx.beginPath(); ctx.moveTo(x-7,y-10); ctx.lineTo(x-18,y-23); ctx.lineTo(x-3,y-15); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x+7,y-10); ctx.lineTo(x+18,y-23); ctx.lineTo(x+3,y-15); ctx.fill();
+  }
+  if(enemy.tag==="tag-titan"){ctx.fillStyle="#0C447C"; ctx.fillRect(x-9,y-13,18,16); ctx.fillStyle="#B5D4F4"; ctx.fillRect(x-6,y-10,5,5); ctx.fillRect(x+1,y-10,5,5);}
+}
+
+function spawnParticles(type,x,y) {
+  const cfg={
+    hit:[{text:"✦",color:"#FAC775",vx:-1,vy:-3},{text:"✦",color:"#EF9F27",vx:1,vy:-2.5},{text:"✦",color:"#EEEDFE",vx:0,vy:-4}],
+    miss:[{text:"✗",color:"#E24B4A",vx:0,vy:-3}],
+    streak:[{text:"★",color:"#FAC775",vx:-1.5,vy:-4},{text:"★",color:"#7F77DD",vx:0,vy:-5},{text:"★",color:"#FAC775",vx:1.5,vy:-4}],
+  };
+  for(const c of cfg[type]||cfg.hit)
+    S.particles.push({text:c.text,color:c.color,x:x+(Math.random()-0.5)*20,y:y-28,vx:c.vx+(Math.random()-0.5),vy:c.vy,size:12,life:36,maxLife:36});
+}
+
+// ─── UI HELPERS ───────────────────────────────────────────────────────────────
+function showToast(msg) {
+  const el=document.getElementById("toast"); el.textContent=msg; el.className="toast show";
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>{el.className="toast";},1800);
+}
+function heartSVG(f) {
+  const fc=f?"#E24B4A":"none", s=f?"#E24B4A":"#B4B2A9";
+  return`<svg viewBox="0 0 16 16"><path d="M8 13.5C8 13.5 1.5 9 1.5 5.5A3.5 3.5 0 0 1 8 4a3.5 3.5 0 0 1 6.5 1.5C14.5 9 8 13.5 8 13.5z" fill="${fc}" stroke="${s}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+}
+function renderHearts() {
+  document.getElementById("hud-hearts").innerHTML=Array.from({length:MAX_HP},(_,i)=>`<span class="heart">${heartSVG(i<S.hp)}</span>`).join("");
+}
+function updateHUD() {
+  let lbl;
+  if(S.phase==="paragraph")lbl="FINAL";
+  else if(S.phase==="combat")lbl="W"+S.wave;
+  else lbl=(S.subPhase==="test"?"L"+(S.lessonIndex+1)+"T":"L"+(S.lessonIndex+1));
+  document.getElementById("hud-wave").textContent=lbl;
+  document.getElementById("hud-score").textContent=S.score;
+  const se=document.getElementById("hud-streak"); se.textContent=S.streak; se.className="hud-val"+(S.streak>=5?" green":"");
+  renderHearts();
+  const xpMin=XP_THRESH[S.level]||0, xpMax=XP_THRESH[S.level+1]||9999;
+  const pct=Math.min(100,Math.round((S.xp-xpMin)/(xpMax-xpMin)*100));
+  const xb=document.getElementById("xp-bar"); if(xb)xb.style.width=pct+"%";
+  const xl=document.getElementById("xp-label"); if(xl)xl.textContent="Lv "+(S.level+1)+" — "+(TITLES[S.level]||"Godlike");
+  const xr=document.getElementById("xp-right"); if(xr)xr.textContent=(S.xp-xpMin)+" / "+(xpMax-xpMin);
+}
+function setFeedback(msg,cls) {
+  const el=document.getElementById("feedback"); if(!el)return;
+  el.textContent=msg; el.className="feedback-bar"+(cls?" "+cls:"");
+}
+function awardXP(amt) {
+  S.xp+=amt; const old=S.level;
+  while(S.level<TITLES.length-1&&S.xp>=(XP_THRESH[S.level+1]||99999))S.level++;
+  if(S.level>old)showToast("Level up! "+TITLES[S.level]+"!");
+}
+function recordWpm() {
+  if(!S.wordStart)return;
+  const elapsed=(Date.now()-S.wordStart)/60000; if(elapsed<0.001)return;
+  const wpm=Math.round((S.currentSeq.length/5)/elapsed);
+  S.recentWpms.push(wpm); if(S.recentWpms.length>10)S.recentWpms.shift();
+  const avg=Math.round(S.recentWpms.reduce((a,b)=>a+b,0)/S.recentWpms.length);
+  if(wpm>S.bestWpm)S.bestWpm=wpm;
+  const el=document.getElementById("hud-wpm"); if(el){el.textContent=avg; el.className="hud-val"+(avg>=30?" green":avg>=15?" amber":"");}
+}
+
+// ─── KEYBOARD BUILDER ─────────────────────────────────────────────────────────
+function buildKeyboard(highlight) {
+  const rows=[["q","w","e","r","t","y","u","i","o","p"],["a","s","d","f","g","h","j","k","l",";"],["z","x","c","v","b","n","m",",",".","/"]];
+  let html='<div class="kb-wrap">';
+  rows.forEach((row,ri)=>{
+    html+='<div class="kb-row">';
+    if(ri===2)html+='<span class="key shift-key">Shift</span>';
+    row.forEach(k=>{const hl=highlight[k]||""; const bump=(k==="f"||k==="j")?" bump":""; html+=`<span class="key ${hl}${bump}">${k}</span>`;});
+    if(ri===2)html+='<span class="key shift-key">Shift</span>';
+    html+='</div>';
+  });
+  return html+'</div>';
+}
+
+function buildPhaseTrack() {
+  const p1cls=S.subPhase==="practice"?"practice-active":S.practicePass>=1?"complete":"";
+  const p2cls=S.subPhase==="practice2"?"practice-active":S.practicePass>=2?"complete":"";
+  const tcls=S.subPhase==="test"?"test-active":"";
+  return`<div class="phase-track"><span class="phase-pip ${p1cls}">Practice 1</span><span class="phase-arrow">›</span><span class="phase-pip ${p2cls}">Practice 2</span><span class="phase-arrow">›</span><span class="phase-pip ${tcls}">Test</span></div>`;
+}
+
+function getCurrentRounds() { const l=LESSONS[S.lessonIndex]; return S.subPhase==="test"?l.testRounds:l.practiceRounds; }
+function getCurrentTimeLimit() { const l=LESSONS[S.lessonIndex]; return S.subPhase==="test"?TEST_TIME_LIMIT:l.timeLimit; }
+function generateSeq() {
+  const l=LESSONS[S.lessonIndex];
+  const len=S.subPhase==="test"?(l.testLen||l.practiceLen+2):(l.practiceLen||6);
+  if(l.wordMode)return l.wordList[Math.floor(Math.random()*l.wordList.length)];
+  return makeSeq(l.seqChars,len);
+}
+
+// ─── LESSON FLOW ──────────────────────────────────────────────────────────────
+function startLesson() {
+  S.phase="lesson"; S.subPhase="practice"; S.practicePass=0;
+  S.roundIndex=0; S.lessonResults=[]; S.failed=false; S.locked=false;
+  S.currentSeq=""; S.wordStart=null;
+  clearTimers(); mountPlayArea(); updateHUD(); loadRound();
+  scheduleSave();
+}
+
+function retryPhase() {
+  S.roundIndex=0; S.lessonResults=[]; S.failed=false; S.locked=false;
+  S.currentSeq=""; S.wordStart=null; S.retryCount++;
+  clearTimers(); mountPlayArea(); updateHUD(); loadRound();
+}
+
+function loadRound() {
+  clearTimers(); S.failed=false; S.locked=false; S.wordStart=null;
+  S.currentSeq=generateSeq();
+  const tf=document.getElementById("timer-fill");
+  if(tf){tf.style.width="100%"; tf.style.background=S.subPhase==="test"?"#E24B4A":"#7F77DD";}
+  const tl=document.getElementById("timer-label");
+  if(tl){tl.textContent=S.subPhase==="test"?"5.0s":""; tl.className="timer-label";}
+  renderSeq(""); updateDots();
+  const inp=document.getElementById("typing-input");
+  if(inp){inp.value=""; inp.className="typing-input"; inp.disabled=false; inp.focus();}
+  const l=LESSONS[S.lessonIndex], isTest=S.subPhase==="test";
+  setFeedback(l.shiftLesson?"Hold Shift for capitals!":l.wordMode?"Type the word!":isTest?"5 seconds — go!":"Type the sequence!","");
+  updateHUD();
+}
+
+function renderSeq(typed) {
+  const seq=S.currentSeq, el=document.getElementById("word-display"); if(!el)return;
+  el.innerHTML=seq.split("").map((c,i)=>{
+    const cls=i<typed.length?(typed[i]===c?"done":"wrong"):i===typed.length?"active":"pending";
+    return`<span class="ch ${cls}">${c===" "?"·":c}</span>`;
+  }).join("");
+}
+
+function updateDots() {
+  const rounds=getCurrentRounds(), el=document.getElementById("progress-dots"); if(!el)return;
+  const isTest=S.subPhase==="test";
+  el.innerHTML="";
+  for(let i=0;i<rounds;i++){
+    const cls=i<S.roundIndex?(S.lessonResults[i]?"done":"fail"):i===S.roundIndex?(isTest?"test-active":"active"):"";
+    el.innerHTML+=`<span class="dot ${cls}"></span>`;
+  }
+}
+
+function startRoundTimer() {
+  S.wordStart=Date.now();
+  const limit=getCurrentTimeLimit();
+  const isTest=S.subPhase==="test";
+  wpmInterval=setInterval(()=>{
+    const typed=(document.getElementById("typing-input")||{}).value||"";
+    if(!typed.length||!S.wordStart)return;
+    const elapsed=(Date.now()-S.wordStart)/60000; if(elapsed<0.002)return;
+    const wpm=Math.round((typed.length/5)/elapsed);
+    const el=document.getElementById("hud-wpm"); if(el){el.textContent=wpm; el.className="hud-val"+(wpm>=30?" green":wpm>=15?" amber":"");}
+  },200);
+  countdownInterval=setInterval(()=>{
+    if(!S.wordStart||S.failed)return;
+    const remaining=Math.max(0,limit-(Date.now()-S.wordStart));
+    const pct=(remaining/limit)*100;
+    const tf=document.getElementById("timer-fill");
+    if(tf){tf.style.width=pct+"%"; tf.style.background=isTest?(pct>60?"#E24B4A":pct>25?"#EF9F27":"#A32D2D"):(pct>50?"#7F77DD":pct>20?"#EF9F27":"#E24B4A");}
+    if(isTest){
+      const tl=document.getElementById("timer-label");
+      if(tl){tl.textContent=(remaining/1000).toFixed(1)+"s"; tl.className="timer-label"+(remaining<2000?" urgent":"");}
+    }
+    if(remaining<=0&&!S.failed)onRoundFail();
+  },50);
+}
+
+function onRoundSuccess() {
+  if(S.failed||S.locked)return;
+  S.locked=true; clearTimers(); recordWpm();
+  S.lessonResults.push(true); S.streak++; S.totalWords++;
+  const pts=10+S.lessonIndex*4+(S.subPhase==="test"?15:5);
+  awardXP(10); S.score+=pts;
+  spawnParticles("hit",52,95);
+  setFeedback("Correct! +"+pts+" pts","win");
+  const inp=document.getElementById("typing-input"); if(inp)inp.className="typing-input ok";
+  const tl=document.getElementById("timer-label"); if(tl)tl.textContent="";
+  updateHUD(); updateDots(); S.roundIndex++;
+  if(S.roundIndex>=getCurrentRounds())setTimeout(showPhaseComplete,700);
+  else setTimeout(loadRound,700);
+}
+
+function onRoundFail() {
+  if(S.failed||S.locked)return;
+  S.failed=true; S.locked=true; clearTimers();
+  S.lessonResults.push(false); S.streak=0;
+  spawnParticles("miss",52,95);
+  const inp=document.getElementById("typing-input"); if(inp){inp.className="typing-input bad"; inp.disabled=true;}
+  const tf=document.getElementById("timer-fill"); if(tf)tf.style.width="0%";
+  const tl=document.getElementById("timer-label"); if(tl){tl.textContent="0.0s"; tl.className="timer-label urgent";}
+  setFeedback("Time's up! Was: "+S.currentSeq,"lose");
+  updateHUD(); updateDots(); S.roundIndex++;
+  if(S.roundIndex>=getCurrentRounds())setTimeout(showPhaseComplete,1000);
+  else setTimeout(()=>{const i=document.getElementById("typing-input"); if(i)i.disabled=false; loadRound();},1000);
+}
+
+function onInput(e) {
+  if(S.failed||S.locked)return;
+  const typed=e.target.value, seq=S.currentSeq;
+  if(typed.length===1&&!S.wordStart)startRoundTimer();
+  let err=false; for(let i=0;i<typed.length;i++)if(typed[i]!==seq[i]){err=true;break;}
+  renderSeq(typed);
+  e.target.className="typing-input"+(err?" bad":typed.length?" ok":"");
+  if(typed===seq)onRoundSuccess();
+}
+
+function showPhaseComplete() {
+  clearTimers();
+  const l=LESSONS[S.lessonIndex];
+  const passed=S.lessonResults.filter(Boolean).length;
+  const total=getCurrentRounds();
+  const didPass=passed>=PASS_THRESHOLD;
+  const avg=S.recentWpms.length?Math.round(S.recentWpms.reduce((a,b)=>a+b,0)/S.recentWpms.length):"—";
+  const isTest=S.subPhase==="test";
+  const isLastLesson=S.lessonIndex>=LESSONS.length-1;
+
+  // Mark lesson complete in persistent record
+  if(isTest&&didPass&&!S.completedLessons.includes(l.id)){
+    S.completedLessons.push(l.id);
+  }
+  scheduleSave();
+
+  let bannerHtml, actionHtml;
+  if(isTest){
+    if(didPass){
+      bannerHtml=`<div class="pass-banner">Test passed! ${passed}/${total} correct within 5 seconds each.</div>`;
+      actionHtml=`<div class="btn-row"><button id="action-btn">${isLastLesson?"Enter Combat!":"Next lesson"}</button></div>`;
+    } else {
+      bannerHtml=`<div class="fail-banner">Test failed — ${passed}/${total} correct (need ${PASS_THRESHOLD}). Each sequence must be typed in 5 seconds.</div>`;
+      actionHtml=`<div class="btn-row"><button id="action-btn" class="retry">Redo practice 1</button></div>`;
+    }
+  } else if(S.subPhase==="practice"){
+    if(didPass){bannerHtml=`<div class="pass-banner">${passed}/${total} correct — on to practice 2!</div>`;actionHtml=`<div class="btn-row"><button id="action-btn">Practice 2</button></div>`;}
+    else{bannerHtml=`<div class="fail-banner">${passed}/${total} correct (need ${PASS_THRESHOLD}). Try again!</div>`;actionHtml=`<div class="btn-row"><button id="action-btn" class="retry">Retry practice 1</button></div>`;}
+  } else {
+    if(didPass){bannerHtml=`<div class="pass-banner">${passed}/${total} correct — ready for the test!</div>`;actionHtml=`<div class="btn-row"><button id="action-btn">Take the test</button></div>`;}
+    else{bannerHtml=`<div class="fail-banner">${passed}/${total} correct (need ${PASS_THRESHOLD}). Try again!</div>`;actionHtml=`<div class="btn-row"><button id="action-btn" class="retry">Retry practice 2</button><button id="back-btn" class="secondary">Back to practice 1</button></div>`;}
+  }
+
+  document.getElementById("play-area").innerHTML=`
+    <div class="overlay">
+      <h2>${l.title}</h2>
+      <p style="font-size:12px;color:#888780;margin-bottom:0.5rem">${isTest?"Final test — 5s per sequence":"Practice "+(S.subPhase==="practice"?"1":"2")}</p>
+      ${bannerHtml}
+      <div class="stats-grid">
+        <div class="stat-item"><div class="n">${passed}/${total}</div><div class="l">Correct</div></div>
+        <div class="stat-item"><div class="n">${Math.round(passed/total*100)}%</div><div class="l">Accuracy</div></div>
+        <div class="stat-item"><div class="n">${avg}</div><div class="l">Avg WPM</div></div>
+        <div class="stat-item"><div class="n">${S.bestWpm||"—"}</div><div class="l">Best WPM</div></div>
+      </div>
+      ${actionHtml}
+    </div>`;
+
+  document.getElementById("action-btn").addEventListener("click",()=>{
+    if(isTest){if(didPass){if(isLastLesson)startCombat();else{S.lessonIndex++;startLesson();}}else{S.subPhase="practice";S.practicePass=0;retryPhase();}}
+    else if(S.subPhase==="practice"){if(didPass){S.subPhase="practice2";S.practicePass=1;retryPhase();}else retryPhase();}
+    else{if(didPass){S.subPhase="test";S.practicePass=2;retryPhase();}else retryPhase();}
+  });
+  const bb=document.getElementById("back-btn");
+  if(bb)bb.addEventListener("click",()=>{S.subPhase="practice";S.practicePass=0;retryPhase();});
+}
+
+// ─── COMBAT ───────────────────────────────────────────────────────────────────
+function startCombat() {
+  S.phase="combat"; S.wave=1; S.hp=MAX_HP;
+  S.waveWords=pickWaveWords(1); S.wordIndex=0;
+  showToast("Combat begins!");
+  mountPlayArea(); updateHUD(); loadCombatWord();
+  scheduleSave();
+}
+
+function loadCombatWord() {
+  clearTimers(); S.failed=false; S.locked=false; S.wordStart=null;
+  S.currentSeq=S.waveWords[S.wordIndex]; S.enemyX=canvas.width*0.73;
+  const enemy=getEnemy(S.wave);
+  const et=document.getElementById("enemy-tag"); if(et){et.textContent=enemy.name; et.className="enemy-tag "+enemy.tag;}
+  const fl=document.getElementById("flavor-text"); if(fl)fl.textContent=enemy.flavor[Math.floor(Math.random()*enemy.flavor.length)];
+  renderCombatWord("");
+  const inp=document.getElementById("typing-input"); if(inp){inp.value=""; inp.className="typing-input"; inp.disabled=false; inp.focus();}
+  const tf=document.getElementById("timer-fill"); if(tf){tf.style.width="100%"; tf.style.background="#1D9E75";}
+  setFeedback("Word "+(S.wordIndex+1)+" of "+WORDS_PER_WAVE,""); updateHUD();
+}
+
+function renderCombatWord(typed) {
+  const word=S.currentSeq, el=document.getElementById("word-display"); if(!el)return;
+  el.innerHTML=word.split("").map((c,i)=>{const cls=i<typed.length?(typed[i]===c?"done":"wrong"):"pending"; return`<span class="ch ${cls}">${c}</span>`;}).join("");
+}
+
+function startCombatTimer() {
+  S.wordStart=Date.now(); const limit=getTimeLimit(S.wave);
+  wpmInterval=setInterval(()=>{const typed=(document.getElementById("typing-input")||{}).value||""; if(!typed.length||!S.wordStart)return; const elapsed=(Date.now()-S.wordStart)/60000; if(elapsed<0.002)return; const wpm=Math.round((typed.length/5)/elapsed); const el=document.getElementById("hud-wpm"); if(el){el.textContent=wpm; el.className="hud-val"+(wpm>=30?" green":wpm>=15?" amber":"");}},200);
+  countdownInterval=setInterval(()=>{if(!S.wordStart||S.failed)return; const remaining=Math.max(0,limit-(Date.now()-S.wordStart)); const pct=(remaining/limit)*100; const tf=document.getElementById("timer-fill"); if(tf){tf.style.width=pct+"%"; tf.style.background=pct>50?"#1D9E75":pct>20?"#EF9F27":"#E24B4A";} if(remaining<=0&&!S.failed)onCombatTimeout();},50);
+}
+
+function onCombatSuccess() {
+  if(S.failed||S.locked)return;
+  S.locked=true; clearTimers(); recordWpm();
+  S.streak++; S.totalWords++;
+  const base=10+S.wave*8, sb=S.streak>=5?20:S.streak>=3?8:0, pts=base+sb;
+  S.score+=pts; awardXP(12+S.wave*3);
+  spawnParticles(S.streak>=5?"streak":"hit",S.enemyX,95);
+  if(S.streak%5===0&&S.streak>0)showToast(S.streak+" streak! +"+pts);
+  const tf=document.getElementById("timer-fill"); if(tf){tf.style.width="100%"; tf.style.background="#1D9E75";}
+  const inp=document.getElementById("typing-input"); if(inp)inp.className="typing-input ok";
+  setFeedback("+"+pts+" pts"+(sb>0?" (streak bonus!)":""),"win");
+  updateHUD(); S.wordIndex++;
+  setTimeout(S.wordIndex>=WORDS_PER_WAVE?showWaveClear:loadCombatWord,700);
+}
+
+function onCombatTimeout() {
+  if(S.failed||S.locked)return;
+  S.failed=true; S.locked=true; clearTimers(); S.streak=0; S.hp--;
+  spawnParticles("miss",80,95);
+  const tf=document.getElementById("timer-fill"); if(tf)tf.style.width="0%";
+  const inp=document.getElementById("typing-input"); if(inp){inp.className="typing-input bad"; inp.disabled=true;}
+  setFeedback("Too slow! Was: "+S.currentSeq,"lose");
+  updateHUD(); S.wordIndex++;
+  if(S.hp<=0){setTimeout(showGameOver,1000);return;}
+  setTimeout(S.wordIndex>=WORDS_PER_WAVE?showWaveClear:loadCombatWord,1000);
+}
+
+function onCombatInput(e) {
+  if(S.failed||S.locked)return;
+  const typed=e.target.value, word=S.currentSeq;
+  if(typed.length===1&&!S.wordStart)startCombatTimer();
+  let err=false; for(let i=0;i<typed.length;i++)if(typed[i]!==word[i]){err=true;break;}
+  renderCombatWord(typed);
+  e.target.className="typing-input"+(err?" bad":typed.length?" ok":"");
+  if(typed===word)onCombatSuccess();
+}
+
+function showWaveClear() {
+  clearTimers(); S.phase="wave_clear";
+  const fl=S.hp===MAX_HP; if(fl)S.score+=60;
+  const avg=S.recentWpms.length?Math.round(S.recentWpms.reduce((a,b)=>a+b,0)/S.recentWpms.length):"—";
+  const isLastWave=S.wave>=ENEMIES.length;
+  scheduleSave();
+  document.getElementById("play-area").innerHTML=`
+    <div class="overlay">
+      <h2>Wave ${S.wave} cleared!</h2>
+      <p>The ${getEnemy(S.wave).name} is defeated!${fl?" Flawless! +60":""}</p>
+      <div class="stats-grid">
+        <div class="stat-item"><div class="n">${S.score}</div><div class="l">Score</div></div>
+        <div class="stat-item"><div class="n">${S.streak}</div><div class="l">Streak</div></div>
+        <div class="stat-item"><div class="n">${avg}</div><div class="l">Avg WPM</div></div>
+        <div class="stat-item"><div class="n">${S.bestWpm||"—"}</div><div class="l">Best WPM</div></div>
+      </div>
+      <button id="next-wave-btn">${isLastWave?"Face the Final Test":"Next wave"}</button>
+    </div>`;
+  document.getElementById("next-wave-btn").addEventListener("click",()=>{isLastWave?startParagraphTest():startNextWave();});
+}
+
+function startNextWave() {
+  S.wave++; S.wordIndex=0; S.waveWords=pickWaveWords(S.wave);
+  S.phase="combat"; S.hp=Math.min(MAX_HP,S.hp+1);
+  mountPlayArea(); updateHUD(); loadCombatWord();
+  scheduleSave();
+}
+
+// ─── PARAGRAPH TEST ───────────────────────────────────────────────────────────
+function startParagraphTest() {
+  S.phase="paragraph"; S.paraIndex=0; S.paraAttempt=0;
+  paraTyped=""; paraErrors=0; paraTotalKeystrokes=0; paraStartTime=null;
+  showToast("The Final Test awaits...");
+  mountParaArea(); updateHUD();
+}
+
+function getCurrentPara() { return PARAGRAPHS[S.paraIndex%PARAGRAPHS.length]; }
+
+function mountParaArea() {
+  const para=getCurrentPara();
+  document.getElementById("play-area").innerHTML=`
+    <div class="para-card">
+      <div class="para-header"><span class="para-badge">Final Test</span><span class="para-title">Paragraph ${S.paraIndex+1} of ${PARAGRAPHS.length}</span></div>
+      <div class="para-meta">
+        <div class="para-stat">Pass: <span>${PASS_ACCURACY}% accuracy</span> + <span>${PASS_WPM} WPM</span></div>
+        <div class="para-stat">Attempt: <span>${S.paraAttempt+1}</span></div>
+      </div>
+      <div class="para-display" id="para-display"></div>
+      <div class="accuracy-bar-wrap"><div class="accuracy-bar-track"><div class="accuracy-bar-fill" id="acc-bar" style="width:100%;background:#1D9E75;"></div></div></div>
+      <div class="live-stats">
+        <div class="live-stat">WPM: <span id="live-wpm">—</span></div>
+        <div class="live-stat">Accuracy: <span id="live-acc">—</span></div>
+        <div class="live-stat">Errors: <span id="live-err">0</span></div>
+        <div class="live-stat">Progress: <span id="live-prog">0/${para.length}</span></div>
+      </div>
+      <div class="timer-track" style="margin-bottom:8px;"><div class="timer-fill" id="timer-fill" style="width:100%;background:#26215C;height:5px;"></div></div>
+    </div>
+    <div class="feedback-bar" id="feedback">Type the paragraph exactly — including punctuation and spaces.</div>
+    <div class="input-row"><input class="para-input" id="para-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="start typing…"/></div>
+    <div class="xp-wrap"><span class="xp-label" id="xp-label">Lv 1</span><div class="xp-track"><div class="xp-bar" id="xp-bar" style="width:0%"></div></div><span class="xp-label" id="xp-right">0 / 80</span></div>`;
+  renderParaDisplay("");
+  const inp=document.getElementById("para-input");
+  if(inp){inp.addEventListener("input",onParaInput); inp.addEventListener("keydown",e=>{if(e.key==="Enter")e.preventDefault();}); inp.focus();}
+  updateHUD();
+}
+
+function renderParaDisplay(typed) {
+  const para=getCurrentPara(), el=document.getElementById("para-display"); if(!el)return;
+  let html="";
+  for(let i=0;i<para.length;i++){
+    let cls;
+    if(i<typed.length)cls=typed[i]===para[i]?"done":(para[i]===" "?"wrong space-wrong":"wrong");
+    else if(i===typed.length)cls="active";
+    else cls="pending";
+    html+=`<span class="para-ch ${cls}">${para[i]===" "?"·":para[i]}</span>`;
+  }
+  el.innerHTML=html;
+  const ae=el.querySelector(".para-ch.active"); if(ae)ae.scrollIntoView({block:"nearest",behavior:"smooth"});
+}
+
+function updateParaLiveStats(typed) {
+  const para=getCurrentPara();
+  let correct=0,errors=0;
+  for(let i=0;i<typed.length;i++){if(i<para.length&&typed[i]===para[i])correct++;else errors++;}
+  const acc=typed.length>0?Math.round((correct/typed.length)*100):100;
+  const elapsed=paraStartTime?(Date.now()-paraStartTime)/60000:0;
+  const wpm=elapsed>0.002?Math.round((typed.length/5)/elapsed):0;
+  if(wpm>S.bestWpm)S.bestWpm=wpm;
+  const we=document.getElementById("live-wpm"); if(we){we.textContent=wpm||"—"; we.className=wpm>=PASS_WPM?"green":wpm>0?"amber":"";}
+  const ae=document.getElementById("live-acc"); if(ae){ae.textContent=typed.length>0?acc+"%":"—"; ae.className=acc>=PASS_ACCURACY?"green":acc>0?"red":"";}
+  const ee=document.getElementById("live-err"); if(ee){ee.textContent=errors; ee.className=errors===0?"green":errors>3?"red":"amber";}
+  const pe=document.getElementById("live-prog"); if(pe)pe.textContent=typed.length+"/"+para.length;
+  const ab=document.getElementById("acc-bar"); if(ab){ab.style.width=acc+"%"; ab.style.background=acc>=PASS_ACCURACY?"#1D9E75":acc>=70?"#EF9F27":"#E24B4A";}
+  const hw=document.getElementById("hud-wpm"); if(hw){hw.textContent=wpm||"—"; hw.className="hud-val"+(wpm>=30?" green":wpm>=15?" amber":"");}
+  const tf=document.getElementById("timer-fill"); if(tf){tf.style.width=Math.round((typed.length/para.length)*100)+"%"; tf.style.background="#7F77DD";}
+}
+
+function onParaInput(e) {
+  const typed=e.target.value, para=getCurrentPara();
+  if(typed.length===1&&!paraStartTime)paraStartTime=Date.now();
+  let hasErr=false; for(let i=0;i<typed.length;i++){if(i>=para.length||typed[i]!==para[i]){hasErr=true;break;}}
+  e.target.className="para-input"+(hasErr?" bad":typed.length?" ok":"");
+  renderParaDisplay(typed); updateParaLiveStats(typed);
+  if(typed===para)finishParagraph(typed);
+}
+
+function finishParagraph(typed) {
+  clearTimers();
+  const para=getCurrentPara();
+  let correct=0; for(let i=0;i<typed.length;i++)if(i<para.length&&typed[i]===para[i])correct++;
+  const acc=Math.round((correct/para.length)*100);
+  const elapsed=paraStartTime?(Date.now()-paraStartTime)/60000:1;
+  const wpm=Math.round((para.length/5)/elapsed);
+  const passed=acc>=PASS_ACCURACY&&wpm>=PASS_WPM;
+  const isLastPara=S.paraIndex>=PARAGRAPHS.length-1;
+  awardXP(passed?100:20); S.score+=passed?500:50;
+  spawnParticles(passed?"streak":"miss",canvas.width/2,95); updateHUD();
+  let bannerHtml,actionHtml;
+  if(passed){
+    bannerHtml=`<div class="pass-banner">Paragraph ${S.paraIndex+1} passed! ${acc}% accuracy at ${wpm} WPM.</div>`;
+    actionHtml=`<div class="btn-row"><button id="action-btn">${isLastPara?"See final results":"Next paragraph"}</button></div>`;
+  } else {
+    const reasons=[]; if(acc<PASS_ACCURACY)reasons.push(`accuracy ${acc}% (need ${PASS_ACCURACY}%)`); if(wpm<PASS_WPM)reasons.push(`speed ${wpm} WPM (need ${PASS_WPM})`);
+    bannerHtml=`<div class="fail-banner">Not quite — ${reasons.join(" and ")}. Try again!</div>`;
+    actionHtml=`<div class="btn-row"><button id="action-btn" class="retry">Retry paragraph</button></div>`;
+  }
+  document.getElementById("play-area").innerHTML=`
+    <div class="overlay">
+      <h2>Paragraph ${S.paraIndex+1} ${passed?"complete":"failed"}</h2>
+      <p style="font-size:12px;color:#888780;margin-bottom:0.5rem">Paragraph ${S.paraIndex+1} of ${PARAGRAPHS.length}</p>
+      ${bannerHtml}
+      <div class="stats-grid">
+        <div class="stat-item"><div class="n">${acc}%</div><div class="l">Accuracy</div></div>
+        <div class="stat-item"><div class="n">${wpm}</div><div class="l">WPM</div></div>
+        <div class="stat-item"><div class="n">${correct}/${para.length}</div><div class="l">Correct chars</div></div>
+        <div class="stat-item"><div class="n">${S.paraAttempt+1}</div><div class="l">Attempts</div></div>
+      </div>
+      ${actionHtml}
+    </div>`;
+  document.getElementById("action-btn").addEventListener("click",()=>{
+    if(passed){if(isLastPara)showFinalVictory();else{S.paraIndex++;S.paraAttempt=0;paraTyped="";paraErrors=0;paraTotalKeystrokes=0;paraStartTime=null;mountParaArea();}}
+    else{S.paraAttempt++;paraTyped="";paraErrors=0;paraTotalKeystrokes=0;paraStartTime=null;mountParaArea();}
+  });
+}
+
+function showFinalVictory() {
+  clearTimers();
+  S.highScore=Math.max(S.highScore,S.score);
+  saveProgress();
+  document.getElementById("play-area").innerHTML=`
+    <div class="overlay">
+      <h2>You are the Typing Legend!</h2>
+      <p>All ${PARAGRAPHS.length} paragraphs defeated. The keyboard fears you now.</p>
+      <div class="stats-grid">
+        <div class="stat-item"><div class="n">${S.score}</div><div class="l">Final score</div></div>
+        <div class="stat-item"><div class="n">${S.wave}</div><div class="l">Waves cleared</div></div>
+        <div class="stat-item"><div class="n">${S.totalWords}</div><div class="l">Words typed</div></div>
+        <div class="stat-item"><div class="n">${S.bestWpm||"—"}</div><div class="l">Peak WPM</div></div>
+      </div>
+      <div class="btn-row"><button id="restart-btn">Play again</button></div>
+    </div>`;
+  document.getElementById("restart-btn").addEventListener("click",()=>{const hs=S.highScore; S=newState(); S.highScore=hs; startLesson();});
+}
+
+function showGameOver() {
+  clearTimers(); S.phase="gameover";
+  S.highScore=Math.max(S.highScore,S.score);
+  saveProgress();
+  document.getElementById("play-area").innerHTML=`
+    <div class="overlay">
+      <h2>Defeated!</h2>
+      <p>The monsters won... this time.</p>
+      <div class="stats-grid">
+        <div class="stat-item"><div class="n">${S.score}</div><div class="l">Final score</div></div>
+        <div class="stat-item"><div class="n">${S.wave}</div><div class="l">Wave reached</div></div>
+        <div class="stat-item"><div class="n">${S.totalWords}</div><div class="l">Words typed</div></div>
+        <div class="stat-item"><div class="n">${S.bestWpm||"—"}</div><div class="l">Best WPM</div></div>
+      </div>
+      <div class="btn-row">
+        <button id="restart-btn">Play again</button>
+        <button id="resume-lesson-btn" class="secondary">Back to lessons</button>
+      </div>
+    </div>`;
+  document.getElementById("restart-btn").addEventListener("click",()=>{const hs=S.highScore; const cl=S.completedLessons; S=newState(); S.highScore=hs; S.completedLessons=cl; startCombat();});
+  document.getElementById("resume-lesson-btn").addEventListener("click",()=>{const hs=S.highScore; const cl=S.completedLessons; S=newState(); S.highScore=hs; S.completedLessons=cl; startLesson();});
+}
+
+// ─── MOUNT PLAY AREA ──────────────────────────────────────────────────────────
+function mountPlayArea() {
+  const l=LESSONS[S.lessonIndex];
+  if(S.phase==="lesson"){
+    const isTest=S.subPhase==="test";
+    const passReq=isTest?`Pass mark: ${PASS_THRESHOLD}/${l.testRounds} — 5 seconds each`:`Pass mark: ${PASS_THRESHOLD}/${l.practiceRounds} to advance`;
+    document.getElementById("play-area").innerHTML=`
+      <div class="lesson-card">
+        <div class="lesson-header">
+          <span class="lesson-badge badge-num">${l.badge}</span>
+          <span class="lesson-badge ${isTest?"badge-test":"badge-practice"}">${isTest?"Test":"Practice "+(S.subPhase==="practice"?"1":"2")}</span>
+          <span class="lesson-title">${l.title}</span>
+        </div>
+        ${buildPhaseTrack()}
+        <div class="lesson-desc">${isTest?"No hints — 5 seconds per sequence. Go!":l.desc}</div>
+        <div class="pass-req">${passReq}</div>
+        ${!isTest?buildKeyboard(l.highlight||{}):""}
+        <div class="progress-dots" id="progress-dots"></div>
+        <div class="word-display" id="word-display"></div>
+        <div class="timer-track"><div class="timer-fill" id="timer-fill" style="width:100%;background:${isTest?"#E24B4A":"#7F77DD"};"></div></div>
+        <div class="timer-label" id="timer-label">${isTest?"5.0s":""}</div>
+      </div>
+      <div class="feedback-bar" id="feedback"></div>
+      <div class="input-row">
+        <input class="typing-input" id="typing-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="${isTest?"5 seconds — type fast!":"type here…"}"/>
+      </div>
+      <div class="xp-wrap">
+        <span class="xp-label" id="xp-label">Lv 1 — Apprentice</span>
+        <div class="xp-track"><div class="xp-bar" id="xp-bar" style="width:0%"></div></div>
+        <span class="xp-label" id="xp-right">0 / 80</span>
+      </div>`;
+    const inp=document.getElementById("typing-input");
+    if(inp){inp.addEventListener("input",onInput); inp.addEventListener("keydown",e=>{if(e.key==="Enter")e.target.value="";});}
+  } else {
+    document.getElementById("play-area").innerHTML=`
+      <div class="word-area">
+        <span class="enemy-tag" id="enemy-tag">Goblin</span>
+        <div class="combat-word" id="word-display"></div>
+        <div class="timer-track"><div class="timer-fill" id="timer-fill" style="width:100%;background:#1D9E75;"></div></div>
+        <div class="flavor" id="flavor-text"></div>
+      </div>
+      <div class="feedback-bar" id="feedback"></div>
+      <div class="input-row">
+        <input class="typing-input" id="typing-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="cast your spell…"/>
+      </div>
+      <div class="xp-wrap">
+        <span class="xp-label" id="xp-label">Lv 1 — Apprentice</span>
+        <div class="xp-track"><div class="xp-bar" id="xp-bar" style="width:0%"></div></div>
+        <span class="xp-label" id="xp-right">0 / 80</span>
+      </div>`;
+    const inp=document.getElementById("typing-input");
+    if(inp){inp.addEventListener("input",onCombatInput); inp.addEventListener("keydown",e=>{if(e.key==="Enter")e.target.value="";});}
+  }
+}
+
+// ─── WELCOME / RESUME SCREEN ──────────────────────────────────────────────────
+function showWelcome(savedData) {
+  const lessonsDone = savedData ? savedData.completedLessons.length : 0;
+  const inCombat = savedData && savedData.phase === "combat";
+  const resumeLabel = inCombat
+    ? `Resume combat (Wave ${savedData.wave})`
+    : `Resume from Lesson ${(savedData ? savedData.lessonIndex : 0)+1}`;
+
+  document.getElementById("play-area").innerHTML=`
+    <div class="overlay">
+      <h2>Typing Quest</h2>
+      <p>Master touch typing. Defeat monsters. Become legend.</p>
+      ${savedData ? `
+      <div class="stats-grid" style="margin-bottom:1rem;">
+        <div class="stat-item"><div class="n">${lessonsDone}/12</div><div class="l">Lessons done</div></div>
+        <div class="stat-item"><div class="n">${savedData.bestWpm||"—"}</div><div class="l">Best WPM</div></div>
+        <div class="stat-item"><div class="n">${savedData.highScore||0}</div><div class="l">High score</div></div>
+        <div class="stat-item"><div class="n">Lv ${(savedData.level||0)+1}</div><div class="l">Level</div></div>
+      </div>
+      <div class="btn-row" style="margin-bottom:0.75rem;">
+        <button id="resume-btn">${resumeLabel}</button>
+        <button id="new-btn" class="secondary">New game</button>
+      </div>
+      <div class="btn-row">
+        <button id="clear-btn" class="danger" style="font-size:11px;padding:0.3rem 0.8rem;">Clear save data</button>
+      </div>` : `
+      <div class="btn-row"><button id="new-btn">Start game</button></div>`}
+    </div>`;
+
+  if(savedData) {
+    document.getElementById("resume-btn").addEventListener("click",()=>{
+      applySave(savedData);
+      if(S.phase==="combat"){mountPlayArea();updateHUD();loadCombatWord();}
+      else startLesson();
+    });
+    document.getElementById("clear-btn").addEventListener("click",()=>{
+      if(confirm("Clear all save data and start fresh?")){ clearSave(); S=newState(); showWelcome(null); }
+    });
+  }
+  document.getElementById("new-btn").addEventListener("click",()=>{
+    const hs = savedData ? (savedData.highScore||0) : 0;
+    S=newState(); S.highScore=hs; startLesson();
+  });
+}
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+const savedData = loadProgress();
+drawScene();
+showWelcome(savedData);
+</script>
+</body>
+</html>

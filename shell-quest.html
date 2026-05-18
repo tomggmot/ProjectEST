@@ -1,0 +1,2110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shell Quest — Eastslide</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg:       #0a0e17;
+    --panel:    #0f1620;
+    --border:   #1e2d40;
+    --accent:   #00d4ff;
+    --green:    #00ff88;
+    --yellow:   #ffd700;
+    --red:      #ff4455;
+    --purple:   #b06eff;
+    --dim:      #3a4a5a;
+    --text:     #c8d8e8;
+    --cmd:      #00ff88;
+    --flag:     #ffd700;
+    --arg:      #b06eff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.07) 2px,
+      rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  #app { max-width: 900px; margin: 0 auto; padding: 16px; }
+
+  /* ─── HEADER ─── */
+  .hdr {
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px; margin-bottom: 16px;
+  }
+  .hdr-title {
+    font-family: 'VT323', monospace;
+    font-size: 2.4rem;
+    color: var(--accent);
+    text-shadow: 0 0 12px var(--accent);
+    letter-spacing: 2px;
+  }
+  .hdr-sub { color: var(--dim); font-size: 0.75rem; margin-top: -4px; }
+  .hdr-stats { display: flex; gap: 18px; }
+  .stat-box { text-align: center; }
+  .stat-val { font-family: 'VT323', monospace; font-size: 1.6rem; color: var(--yellow); }
+  .stat-lbl { font-size: 0.6rem; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* ─── XP BAR ─── */
+  .xp-bar-wrap { margin-bottom: 14px; }
+  .xp-bar-track { background: var(--border); height: 6px; border-radius: 3px; overflow: hidden; }
+  .xp-bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--green));
+    transition: width 0.4s ease;
+    box-shadow: 0 0 8px var(--accent);
+  }
+  .xp-label { font-size: 0.65rem; color: var(--dim); margin-bottom: 3px; }
+
+  /* ─── CANVAS SCENE ─── */
+  #scene { display: block; width: 100%; image-rendering: pixelated; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 14px; }
+
+  /* ─── PHASE BADGE ─── */
+  .phase-badge {
+    display: inline-block;
+    font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 2px; margin-bottom: 10px;
+    border: 1px solid;
+  }
+  .phase-practice { border-color: var(--green); color: var(--green); }
+  .phase-test     { border-color: var(--yellow); color: var(--yellow); }
+  .phase-combat   { border-color: var(--red); color: var(--red); }
+  .phase-boss     { border-color: var(--purple); color: var(--purple); }
+  .phase-decode   { border-color: var(--accent); color: var(--accent); }
+  .phase-readmode { border-color: var(--purple); color: var(--purple); }
+
+  /* ─── LESSON TITLE ─── */
+  .lesson-title {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 1rem; font-weight: 700;
+    color: var(--accent); margin-bottom: 6px;
+    letter-spacing: 1px;
+  }
+  .lesson-desc { font-size: 0.8rem; color: var(--text); margin-bottom: 14px; line-height: 1.5; }
+
+  /* ─── PROMPT DISPLAY ─── */
+  .prompt-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    position: relative;
+  }
+  .prompt-label { font-size: 0.65rem; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .prompt-target {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.25rem;
+    letter-spacing: 1px;
+    line-height: 1.6;
+  }
+  .t-cmd  { color: var(--cmd); }
+  .t-flag { color: var(--flag); }
+  .t-arg  { color: var(--arg); }
+  .t-pipe { color: var(--accent); }
+  .t-redir{ color: var(--red); }
+  .t-sep  { color: var(--dim); }
+
+  /* ─── TIMER ARC ─── */
+  .timer-wrap { position: absolute; top: 10px; right: 12px; }
+  #timerCanvas { display: block; }
+
+  /* ─── INPUT AREA ─── */
+  .input-wrap { display: flex; gap: 8px; margin-bottom: 12px; }
+  .shell-prefix { color: var(--green); font-size: 1rem; padding: 10px 0; white-space: nowrap; }
+  #cmdInput {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1rem;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #cmdInput:focus { border-color: var(--accent); box-shadow: 0 0 6px rgba(0,212,255,0.2); }
+  #cmdInput.correct { border-color: var(--green); background: rgba(0,255,136,0.05); }
+  #cmdInput.wrong   { border-color: var(--red);   background: rgba(255,68,85,0.05); animation: shake 0.3s; }
+
+  @keyframes shake {
+    0%,100%{transform:translateX(0)}
+    25%{transform:translateX(-6px)}
+    75%{transform:translateX(6px)}
+  }
+
+  /* ─── FEEDBACK ─── */
+  .feedback {
+    font-size: 0.85rem;
+    min-height: 1.4em;
+    margin-bottom: 10px;
+    transition: opacity 0.3s;
+  }
+  .feedback.ok  { color: var(--green); }
+  .feedback.err { color: var(--red); }
+  .feedback.hint{ color: var(--yellow); }
+
+  /* ─── PROGRESS DOTS ─── */
+  .dots { display: flex; gap: 6px; margin-bottom: 14px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--dim); }
+  .dot.done { background: var(--green); border-color: var(--green); box-shadow: 0 0 4px var(--green); }
+  .dot.cur  { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 6px var(--accent); }
+
+  /* ─── DECODER RING ─── */
+  .decoder-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 6px;
+    margin-bottom: 14px;
+    font-size: 0.78rem;
+  }
+  .decoder-row {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 3px;
+  }
+  .decoder-flag { color: var(--flag); }
+  .decoder-meaning { color: var(--text); }
+  .decoder-examples { color: var(--dim); font-size: 0.7rem; }
+
+  /* ─── WHAT DOES THIS DO ─── */
+  .read-mode-prompt {
+    background: var(--panel);
+    border: 1px solid var(--purple);
+    border-radius: 4px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    font-size: 1.1rem;
+    color: var(--purple);
+    text-align: center;
+    letter-spacing: 1px;
+  }
+  .read-choices { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .choice-btn {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.82rem;
+    padding: 9px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .choice-btn:hover { border-color: var(--accent); background: rgba(0,212,255,0.05); }
+  .choice-btn.correct-choice { border-color: var(--green); background: rgba(0,255,136,0.08); color: var(--green); }
+  .choice-btn.wrong-choice   { border-color: var(--red);   background: rgba(255,68,85,0.08);  color: var(--red); }
+
+  /* ─── COMBAT ─── */
+  .combat-info {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px; font-size: 0.75rem;
+  }
+  .hp-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .hp-bar-track { width: 120px; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .hp-bar-fill { height: 100%; background: var(--red); transition: width 0.3s; box-shadow: 0 0 6px var(--red); }
+
+  /* ─── SCREEN PANELS ─── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ─── WELCOME ─── */
+  .welcome-art {
+    font-family: 'VT323', monospace;
+    font-size: 1.8rem;
+    color: var(--green);
+    text-shadow: 0 0 10px var(--green);
+    text-align: center;
+    margin: 20px 0;
+    line-height: 1.3;
+  }
+  .welcome-body { font-size: 0.85rem; line-height: 1.7; color: var(--text); margin-bottom: 20px; }
+  .welcome-body p { margin-bottom: 10px; }
+
+  /* ─── BUTTONS ─── */
+  .btn {
+    display: inline-block;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 10px 24px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    background: transparent;
+    cursor: pointer;
+    border-radius: 3px;
+    text-transform: uppercase;
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .btn:hover { background: rgba(0,212,255,0.1); box-shadow: 0 0 12px rgba(0,212,255,0.3); }
+  .btn-green { border-color: var(--green); color: var(--green); }
+  .btn-green:hover { background: rgba(0,255,136,0.1); box-shadow: 0 0 12px rgba(0,255,136,0.3); }
+  .btn-red { border-color: var(--red); color: var(--red); }
+  .btn-danger { border-color: var(--red); color: var(--red); }
+  .btn-danger:hover { background: rgba(255,68,85,0.1); }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+  /* ─── GROUP SELECT ─── */
+  .group-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .group-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    position: relative;
+  }
+  .group-card:hover { border-color: var(--accent); }
+  .group-card.locked { opacity: 0.4; cursor: default; }
+  .group-card.locked:hover { border-color: var(--border); }
+  .group-card.complete { border-color: var(--green); }
+  .group-num { font-family: 'VT323', monospace; font-size: 1.4rem; color: var(--accent); }
+  .group-name { font-size: 0.78rem; color: var(--text); margin-top: 2px; }
+  .group-vocab { font-size: 0.65rem; color: var(--dim); margin-top: 4px; }
+  .group-badge { position: absolute; top: 8px; right: 8px; font-size: 0.7rem; }
+
+  /* ─── RESULT ─── */
+  .result-block {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .result-title { font-family: 'VT323', monospace; font-size: 2.5rem; margin-bottom: 8px; }
+  .result-ok   { color: var(--green); text-shadow: 0 0 10px var(--green); }
+  .result-fail { color: var(--red);   text-shadow: 0 0 10px var(--red); }
+  .result-stats { font-size: 0.8rem; color: var(--dim); margin-top: 8px; }
+  .result-xp { font-family: 'VT323', monospace; font-size: 1.6rem; color: var(--yellow); margin-top: 6px; }
+
+  /* ─── EXPLANATION ─── */
+  .explain-box {
+    background: var(--panel);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    margin-bottom: 12px;
+    color: var(--text);
+  }
+  .explain-box strong { color: var(--accent); }
+
+  /* ─── NOTIFICATION TOAST ─── */
+  #toast {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-size: 0.8rem;
+    color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 1000;
+  }
+  #toast.show { opacity: 1; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .nav-row { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .nav-crumb { font-size: 0.7rem; color: var(--dim); }
+  .nav-crumb span { color: var(--accent); }
+
+  .highlight-box {
+    background: rgba(0,212,255,0.06);
+    border: 1px solid rgba(0,212,255,0.2);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER (always visible) -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">$ Shell Quest_</div>
+      <div class="hdr-sub">eastslide.com — CLI fluency trainer</div>
+    </div>
+    <div class="hdr-stats">
+      <div class="stat-box"><div class="stat-val" id="statXP">0</div><div class="stat-lbl">XP</div></div>
+      <div class="stat-box"><div class="stat-val" id="statStreak">0</div><div class="stat-lbl">Streak</div></div>
+      <div class="stat-box"><div class="stat-val" id="statLevel">1</div><div class="stat-lbl">Level</div></div>
+    </div>
+  </div>
+  <div class="xp-bar-wrap">
+    <div class="xp-label">XP to next level</div>
+    <div class="xp-bar-track"><div class="xp-bar-fill" id="xpBar" style="width:0%"></div></div>
+  </div>
+
+  <!-- Canvas scene -->
+  <canvas id="scene" width="900" height="120"></canvas>
+
+  <!-- SCREENS -->
+
+  <!-- 1. WELCOME -->
+  <div class="screen active" id="scWelcome">
+    <div class="welcome-art">
+[ SHELL QUEST ]<br>
+&gt; A CLI vocabulary trainer &lt;<br>
+<span style="font-size:1rem;color:var(--dim)">// words before pipes. commands before scripts. //</span>
+    </div>
+    <div class="welcome-body">
+      <p>Shell fluency works like spoken language. You don't learn to write sentences before you know any words. This game teaches you the words first — <span style="color:var(--cmd)">commands</span>, then <span style="color:var(--flag)">flags</span>, then <span style="color:var(--purple)">pipelines</span>.</p>
+      <p>Ten lesson groups. Practice rounds, timed tests, combat waves, and boss fights based on <em>real Eastslide tasks</em> you've already done or will do. The final boss: stand up a container from scratch, one command at a time.</p>
+      <p style="color:var(--dim)">Progress saves automatically. You can blame localStorage if it disappears.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-green" onclick="startGame()">BEGIN TRAINING</button>
+      <button class="btn" onclick="showDecoder()">DECODER RING</button>
+      <button class="btn btn-danger" onclick="confirmReset()">RESET SAVE</button>
+    </div>
+  </div>
+
+  <!-- 2. DECODER RING -->
+  <div class="screen" id="scDecoder">
+    <div class="nav-row">
+      <button class="btn" onclick="showScreen('scWelcome')" style="font-size:0.65rem;padding:6px 12px">← BACK</button>
+      <div class="nav-crumb">// <span>Decoder Ring</span> — the rosetta stone of flags</div>
+    </div>
+    <div class="lesson-title">THE FLAG DECODER RING</div>
+    <div class="lesson-desc">Single-letter flags follow consistent patterns across most Unix tools. The short flag is almost always the first letter of the long form. Memorize the word, remember the flag forever. When confused: <span style="color:var(--cmd)">command --help</span></div>
+    <div class="decoder-grid" id="decoderGrid"></div>
+    <div class="highlight-box">
+      <strong style="color:var(--flag)">-l</strong> is a useful liar — same letter, different words, same logic:<br>
+      <span style="color:var(--cmd)">ls -l</span> → <em>long</em> format &nbsp;|&nbsp;
+      <span style="color:var(--cmd)">grep -l</span> → <em>list</em> filenames &nbsp;|&nbsp;
+      <span style="color:var(--cmd)">wc -l</span> → <em>lines</em> count &nbsp;|&nbsp;
+      <span style="color:var(--cmd)">ssh -l</span> → <em>login</em> user
+    </div>
+  </div>
+
+  <!-- 3. GROUP SELECT -->
+  <div class="screen" id="scGroups">
+    <div class="nav-row">
+      <button class="btn" onclick="showScreen('scWelcome')" style="font-size:0.65rem;padding:6px 12px">← MENU</button>
+      <div class="nav-crumb">// <span>Select Group</span></div>
+    </div>
+    <div class="lesson-title">TRAINING CURRICULUM</div>
+    <div class="group-grid" id="groupGrid"></div>
+  </div>
+
+  <!-- 4. LESSON (practice / test) -->
+  <div class="screen" id="scLesson">
+    <div class="nav-row">
+      <button class="btn" onclick="showScreen('scGroups')" style="font-size:0.65rem;padding:6px 12px">← GROUPS</button>
+      <div class="nav-crumb" id="lessonCrumb"></div>
+    </div>
+    <div class="phase-badge" id="phaseBadge"></div>
+    <div class="lesson-title" id="lessonTitle"></div>
+    <div class="lesson-desc" id="lessonDesc"></div>
+    <div class="explain-box" id="explainBox"></div>
+    <div class="dots" id="progressDots"></div>
+
+    <!-- TYPE MODE -->
+    <div id="typeModeArea">
+      <div class="prompt-wrap">
+        <div class="prompt-label">Type exactly:</div>
+        <div class="prompt-target" id="promptTarget"></div>
+        <div class="timer-wrap" id="timerWrap" style="display:none">
+          <canvas id="timerCanvas" width="44" height="44"></canvas>
+        </div>
+      </div>
+      <div class="input-wrap">
+        <div class="shell-prefix">tom@eastslide:~$</div>
+        <input type="text" id="cmdInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="type the command..." />
+      </div>
+      <div class="feedback" id="feedbackBox"></div>
+    </div>
+
+    <!-- READ MODE (what does this do?) -->
+    <div id="readModeArea" style="display:none">
+      <div class="read-mode-prompt" id="readPrompt"></div>
+      <div class="read-choices" id="readChoices"></div>
+      <div class="feedback" id="readFeedback"></div>
+    </div>
+  </div>
+
+  <!-- 5. COMBAT -->
+  <div class="screen" id="scCombat">
+    <div class="nav-row">
+      <button class="btn" onclick="showScreen('scGroups')" style="font-size:0.65rem;padding:6px 12px">← RETREAT</button>
+      <div class="nav-crumb" id="combatCrumb"></div>
+    </div>
+    <div class="phase-badge phase-combat">⚔ COMBAT</div>
+    <div class="combat-info">
+      <div>Wave <span id="waveNum">1</span> / 10</div>
+      <div class="hp-bar-wrap">
+        ENEMY HP:
+        <div class="hp-bar-track"><div class="hp-bar-fill" id="enemyHp" style="width:100%"></div></div>
+      </div>
+      <div>Lives: <span id="livesLeft" style="color:var(--red)">❤❤❤</span></div>
+    </div>
+    <div class="prompt-wrap">
+      <div class="prompt-label">Incoming command — what does this do?</div>
+      <div class="prompt-target" id="combatPrompt"></div>
+      <div class="timer-wrap">
+        <canvas id="combatTimer" width="44" height="44"></canvas>
+      </div>
+    </div>
+    <div class="read-choices" id="combatChoices"></div>
+    <div class="feedback" id="combatFeedback"></div>
+  </div>
+
+  <!-- 6. BOSS -->
+  <div class="screen" id="scBoss">
+    <div class="nav-row">
+      <button class="btn" onclick="showScreen('scGroups')" style="font-size:0.65rem;padding:6px 12px">← GROUPS</button>
+      <div class="nav-crumb" id="bossCrumb"></div>
+    </div>
+    <div class="phase-badge phase-boss">☠ BOSS FIGHT</div>
+    <div class="lesson-title" id="bossTitle"></div>
+    <div class="explain-box" id="bossScenario"></div>
+    <div class="dots" id="bossDots"></div>
+    <div class="prompt-wrap">
+      <div class="prompt-label">Task:</div>
+      <div class="prompt-target" id="bossPrompt" style="color:var(--text)"></div>
+    </div>
+    <div class="input-wrap">
+      <div class="shell-prefix">tom@eastslide:~$</div>
+      <input type="text" id="bossInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="type the command..." />
+    </div>
+    <div class="feedback" id="bossFeedback"></div>
+  </div>
+
+  <!-- 7. RESULT -->
+  <div class="screen" id="scResult">
+    <div class="result-block">
+      <div class="result-title" id="resultTitle"></div>
+      <div id="resultMsg" style="font-size:0.85rem;color:var(--text)"></div>
+      <div class="result-xp" id="resultXP"></div>
+      <div class="result-stats" id="resultStats"></div>
+    </div>
+    <div class="explain-box" id="resultExplain" style="display:none"></div>
+    <div class="btn-row" id="resultButtons"></div>
+  </div>
+
+</div><!-- /app -->
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════
+
+const DECODER = [
+  {flag:'-v', meaning:'verbose / version', ex:'cp -v, --version'},
+  {flag:'-r / -R', meaning:'recursive', ex:'cp -r, chmod -R'},
+  {flag:'-f', meaning:'force / file', ex:'rm -f, tar -f'},
+  {flag:'-n', meaning:'number / dry run', ex:'tail -n, rsync -n'},
+  {flag:'-l', meaning:'long / list / lines', ex:'ls -l, grep -l, wc -l'},
+  {flag:'-a', meaning:'all (incl. hidden)', ex:'ls -a, rsync -a'},
+  {flag:'-q', meaning:'quiet', ex:'apt install -q'},
+  {flag:'-h', meaning:'human-readable / help', ex:'du -h, --help'},
+  {flag:'-o', meaning:'output', ex:'curl -o, gcc -o'},
+  {flag:'-i', meaning:'interactive / ignore-case / in-place', ex:'rm -i, grep -i, sed -i'},
+  {flag:'-e', meaning:'expression', ex:'grep -e, sed -e'},
+  {flag:'-d', meaning:'directory / delimiter', ex:'mkdir -d, cut -d'},
+  {flag:'-p', meaning:'port / preserve / parents', ex:'ssh -p, mkdir -p'},
+  {flag:'-u', meaning:'user / update', ex:'id -u, rsync -u'},
+  {flag:'-x', meaning:'exclude / execute', ex:'tar -x, chmod +x'},
+  {flag:'-c', meaning:'count / command / create', ex:'grep -c, bash -c'},
+  {flag:'-s', meaning:'silent / size / symbolic', ex:'curl -s, du -s, ln -s'},
+  {flag:'-z', meaning:'compress / null-terminated', ex:'tar -z, xargs -0'},
+];
+
+const GROUPS = [
+  {
+    id: 0, name:'Where Am I?', topic:'Navigation',
+    vocab:['pwd','ls','cd','tree','which','man','--help'],
+    desc:'Before you can do anything, you need to know where you are. These commands answer: what directory am I in, what\'s in it, how do I move, and how do I get help.',
+    lessons:[
+      {
+        cmd:'pwd', type:'type',
+        explain:'<strong>pwd</strong> = print working directory. It\'s the "you are here" sticker on the map. Zero arguments, zero flags, zero confusion.',
+        hint:'Three letters. Stands for Print Working Directory.'
+      },
+      {
+        cmd:'ls', type:'type',
+        explain:'<strong>ls</strong> = list. Shows files and directories in current location. Bare minimum — no flags.',
+        hint:'Two letters. Think "list".'
+      },
+      {
+        cmd:'ls -l', type:'type',
+        explain:'<strong>ls -l</strong> — long format. Adds permissions, owner, size, and date to each entry. The <span class="t-flag">-l</span> is from the decoder ring: <em>l = long</em>.',
+        hint:'-l is in the decoder ring. l = long.'
+      },
+      {
+        cmd:'ls -a', type:'type',
+        explain:'<strong>ls -a</strong> — all, including hidden files (files starting with a dot). Your .bashrc, .ssh, .gitconfig — all invisible without -a.',
+        hint:'-a = all, including dotfiles.'
+      },
+      {
+        cmd:'ls -la', type:'type',
+        explain:'<strong>ls -la</strong> — long + all combined. The most commonly typed ls variant. You\'ll type this hundreds of times.',
+        hint:'Stack -l and -a together.'
+      },
+      {
+        cmd:'cd ..', type:'type',
+        explain:'<strong>cd ..</strong> — go up one directory. Two dots = parent. One dot = here (used in paths like ./script.sh).',
+        hint:'cd = change directory. Two dots = parent.'
+      },
+      {
+        cmd:'which grep', type:'type',
+        explain:'<strong>which</strong> finds the full path of an executable. Answers "which grep am I actually running?" Useful when you have multiple versions of something installed.',
+        hint:'which + the name of any command.'
+      },
+      {
+        cmd:'man ls', type:'type',
+        explain:'<strong>man</strong> = manual. Full documentation, built in. Navigate with arrow keys, search with /, quit with q. The original --help before --help existed.',
+        hint:'man + any command name.'
+      },
+    ],
+    test:['pwd','ls -la','cd ..','which grep','man ls'],
+    readMode:[
+      {cmd:'pwd', choices:['Print the current directory path','List files in home directory','Show disk usage','Display path variable'], answer:0},
+      {cmd:'ls -la', choices:['Long format listing including hidden files','List all logs','Show last activity','Open file manager'], answer:0},
+      {cmd:'which bash', choices:['Find the path to the bash executable','Check bash version','Show bash history','Open bash manual'], answer:0},
+    ],
+    boss:{
+      scenario:'You SSH into an unfamiliar box. You need to know: where are you, what\'s here, and where is the nginx binary.',
+      steps:[
+        {prompt:'Print your current directory', answer:'pwd'},
+        {prompt:'List all files including hidden ones in long format', answer:'ls -la'},
+        {prompt:'Find the full path to the nginx executable', answer:'which nginx'},
+      ]
+    }
+  },
+  {
+    id: 1, name:'Files & Dirs', topic:'Creation and Destruction',
+    vocab:['touch','mkdir','cp','mv','rm','rmdir','ln'],
+    desc:'You can navigate. Now you need to create, copy, move, and destroy. This is where you also meet rm -rf — the chainsaw. Respect the chainsaw.',
+    lessons:[
+      {
+        cmd:'touch notes.txt', type:'type',
+        explain:'<strong>touch</strong> creates an empty file, or updates the timestamp of an existing one. Primary use: creating blank files as placeholders.',
+        hint:'touch + filename'
+      },
+      {
+        cmd:'mkdir logs', type:'type',
+        explain:'<strong>mkdir</strong> = make directory. Creates a new folder. Fails if the directory already exists (use -p to avoid that).',
+        hint:'mkdir + directory name'
+      },
+      {
+        cmd:'mkdir -p /opt/app/data', type:'type',
+        explain:'<strong>mkdir -p</strong> — creates the whole path at once. <span class="t-flag">-p</span> = parents. Without -p, mkdir fails if /opt/app doesn\'t exist. With -p, it creates every missing piece.',
+        hint:'-p = parents. Creates the whole path.'
+      },
+      {
+        cmd:'cp notes.txt backup.txt', type:'type',
+        explain:'<strong>cp</strong> = copy. Source first, destination second. Always. Every time. cp never moves — it only duplicates.',
+        hint:'cp source destination'
+      },
+      {
+        cmd:'cp -r config/ backup/', type:'type',
+        explain:'<strong>cp -r</strong> — recursive. Required when copying directories. cp refuses to touch directories without -r.',
+        hint:'-r = recursive. Required for directories.'
+      },
+      {
+        cmd:'mv old.txt new.txt', type:'type',
+        explain:'<strong>mv</strong> = move (or rename). Unlike cp, mv has no -r — it handles directories natively. That inconsistency is real and intentional to call out.',
+        hint:'mv source destination. No -r needed, ever.'
+      },
+      {
+        cmd:'rm -i notes.txt', type:'type',
+        explain:'<strong>rm -i</strong> — interactive. Asks before deleting. The training wheels. Learn with -i, then decide when to take them off.',
+        hint:'-i = interactive, asks first.'
+      },
+      {
+        cmd:'rm -rf old_backups/', type:'type',
+        explain:'<strong>rm -rf</strong> — recursive force. Deletes everything without asking. No recycle bin. No undo. No confirmation. The shell\'s way of saying "you sure about that?" — and not waiting for the answer.',
+        hint:'-r recursive, -f force. No confirmation.'
+      },
+      {
+        cmd:'ln -s /etc/nginx/nginx.conf nginx.conf', type:'type',
+        explain:'<strong>ln -s</strong> creates a symbolic link (symlink). Like a Windows shortcut but useful. <span class="t-flag">-s</span> = symbolic. Without -s you get a hard link, which is different and rarer.',
+        hint:'-s = symbolic link. Source first, then where the link lives.'
+      },
+    ],
+    test:['mkdir -p /opt/app/data','cp -r config/ backup/','rm -i notes.txt','ln -s /etc/nginx/nginx.conf nginx.conf','touch deploy.sh'],
+    readMode:[
+      {cmd:'rm -rf /tmp/old/', choices:['Recursively force-delete the /tmp/old/ directory','Remove files if found','Rename tmp folder','Reload tmp daemon'], answer:0},
+      {cmd:'ln -s /etc/nginx/nginx.conf nginx.conf', choices:['Create a symbolic link to nginx.conf','Copy nginx config','Move nginx config','Lock nginx config file'], answer:0},
+      {cmd:'mkdir -p /opt/app/data', choices:['Create /opt/app/data and all missing parent directories','Make one directory called p','Delete old data directory','Print directory path'], answer:0},
+    ],
+    boss:{
+      scenario:'CT108 is being set up as a static web host. You need to create the directory structure and a placeholder HTML file before Nginx is configured.',
+      steps:[
+        {prompt:'Create the full path /var/www/html in one command', answer:'mkdir -p /var/www/html'},
+        {prompt:'Create an empty index.html file in /var/www/html/', answer:'touch /var/www/html/index.html'},
+        {prompt:'Create a symlink: link /var/www/html to /srv/web', answer:'ln -s /var/www/html /srv/web'},
+      ]
+    }
+  },
+  {
+    id: 2, name:'Reading Things', topic:'Inspection',
+    vocab:['cat','less','head','tail','wc','file','stat'],
+    desc:'Files exist. Now you need to read them. Logs, configs, whatever. tail -f is the single most useful command in this group. You will use it constantly.',
+    lessons:[
+      {
+        cmd:'cat /etc/hostname', type:'type',
+        explain:'<strong>cat</strong> = concatenate. Dumps the whole file to stdout immediately. Great for short files, bad for logs with 50,000 lines. Works fine for configs.',
+        hint:'cat + file path'
+      },
+      {
+        cmd:'cat -n /etc/hosts', type:'type',
+        explain:'<strong>cat -n</strong> — number lines. Adds line numbers to output. Useful when you need to reference "line 24 of that config."',
+        hint:'-n = number lines. In the decoder ring.'
+      },
+      {
+        cmd:'head -n 20 /var/log/syslog', type:'type',
+        explain:'<strong>head</strong> shows the first N lines of a file. Default is 10. <span class="t-flag">-n 20</span> gives you 20. Read: "show me the top 20 lines."',
+        hint:'-n 20 = first 20 lines.'
+      },
+      {
+        cmd:'tail -n 50 /var/log/syslog', type:'type',
+        explain:'<strong>tail</strong> shows the last N lines. Mirrors head exactly. Tail for end, head for top.',
+        hint:'-n 50 = last 50 lines.'
+      },
+      {
+        cmd:'tail -f /var/log/syslog', type:'type',
+        explain:'<strong>tail -f</strong> — follow. Keeps the file open and prints new lines as they arrive. Real-time log watching. <span class="t-flag">-f</span> = follow. This is the one you\'ll run most.',
+        hint:'-f = follow. Live log output. You\'ll use this constantly.'
+      },
+      {
+        cmd:'tail -f -n 100 /var/log/nginx/error.log', type:'type',
+        explain:'Two flags at once: start with the last 100 lines <span class="t-flag">(-n 100)</span>, then keep following <span class="t-flag">(-f)</span>. Read it left to right: "tail, follow, show 100 lines, of this file." Your first multi-flag sentence.',
+        hint:'Combine -f and -n together. File path last.'
+      },
+      {
+        cmd:'wc -l /etc/passwd', type:'type',
+        explain:'<strong>wc</strong> = word count. <span class="t-flag">-l</span> = lines. Also -w (words) and -c (bytes). wc -l on a log tells you how many events you\'re dealing with.',
+        hint:'wc -l = line count. -l from decoder ring.'
+      },
+      {
+        cmd:'stat /etc/nginx/nginx.conf', type:'type',
+        explain:'<strong>stat</strong> shows metadata: inode, size, permissions, timestamps (access, modify, change). More detail than ls -l.',
+        hint:'stat + path. Shows full file metadata.'
+      },
+    ],
+    test:['tail -f /var/log/syslog','head -n 20 /var/log/syslog','wc -l /etc/passwd','cat -n /etc/hosts','stat /etc/nginx/nginx.conf'],
+    readMode:[
+      {cmd:'tail -f -n 100 /var/log/nginx/error.log', choices:['Follow nginx error log starting from last 100 lines','Show head of log','Delete 100 log lines','Format log file'], answer:0},
+      {cmd:'wc -l /etc/passwd', choices:['Count lines in /etc/passwd','Count words in passwd','Print contents of passwd','Show passwd permissions'], answer:0},
+      {cmd:'stat /etc/nginx/nginx.conf', choices:['Show metadata for nginx.conf','Start nginx','Edit nginx config','Check nginx status'], answer:0},
+    ],
+    boss:{
+      scenario:'CT106 (Sunshine) isn\'t starting on boot. Time to read some logs.',
+      steps:[
+        {prompt:'Show the last 50 lines of /var/log/syslog', answer:'tail -n 50 /var/log/syslog'},
+        {prompt:'Follow the syslog in real time', answer:'tail -f /var/log/syslog'},
+        {prompt:'Count how many lines are in /var/log/syslog', answer:'wc -l /var/log/syslog'},
+      ]
+    }
+  },
+  {
+    id: 3, name:'Finding Things', topic:'Search',
+    vocab:['find','grep','locate','which','whereis'],
+    desc:'Navigation shows you what\'s there. Search finds what you\'re looking for. grep searches inside files. find searches the filesystem itself.',
+    lessons:[
+      {
+        cmd:'grep "error" /var/log/syslog', type:'type',
+        explain:'<strong>grep</strong> searches for a pattern inside a file and prints matching lines. Case-sensitive by default.',
+        hint:'grep "pattern" file'
+      },
+      {
+        cmd:'grep -i "error" /var/log/syslog', type:'type',
+        explain:'<strong>grep -i</strong> — ignore case. "Error", "ERROR", "eRrOr" all match. <span class="t-flag">-i</span> from the decoder ring: i = ignore-case.',
+        hint:'-i = ignore case.'
+      },
+      {
+        cmd:'grep -r "listen 80" /etc/nginx/', type:'type',
+        explain:'<strong>grep -r</strong> — recursive. Searches through every file in the directory. Essential for hunting through config directories.',
+        hint:'-r = recursive. Searches all files in directory.'
+      },
+      {
+        cmd:'grep -n "server_name" /etc/nginx/nginx.conf', type:'type',
+        explain:'<strong>grep -n</strong> — line numbers. Shows which line each match is on. Critical when you need to edit a specific line.',
+        hint:'-n = show line numbers with matches.'
+      },
+      {
+        cmd:'grep -v "^#" /etc/nginx/nginx.conf', type:'type',
+        explain:'<strong>grep -v</strong> — invert. Shows lines that do NOT match. Here, filtering out comment lines (starting with #). ^ means "start of line."',
+        hint:'-v = invert. Show lines that do NOT match.'
+      },
+      {
+        cmd:'grep -c "GET" /var/log/nginx/access.log', type:'type',
+        explain:'<strong>grep -c</strong> — count. Prints the number of matching lines instead of the lines themselves. Quick way to see how busy something is.',
+        hint:'-c = count matches, not show them.'
+      },
+      {
+        cmd:'find /etc -name "*.conf"', type:'type',
+        explain:'<strong>find</strong> searches the filesystem. <span class="t-flag">-name "*.conf"</span> matches any filename ending in .conf. The quotes matter — they prevent the shell from expanding the * itself.',
+        hint:'find path -name "pattern". Quote the pattern.'
+      },
+      {
+        cmd:'find /var/log -type f -mtime -7', type:'type',
+        explain:'<strong>find</strong> with two filters: <span class="t-flag">-type f</span> (files only, not directories), <span class="t-flag">-mtime -7</span> (modified within last 7 days). Multiple flags = narrower search.',
+        hint:'-type f = files only. -mtime -7 = last 7 days.'
+      },
+      {
+        cmd:'find . -name "*.log" | grep "error"', type:'type',
+        explain:'Your first real pipeline. find outputs filenames. The pipe feeds those filenames into grep, which filters for ones containing "error". Left to right: find all .log files, then grep the list for "error".',
+        hint:'find | grep — two commands, one pipe. Space around the pipe.'
+      },
+    ],
+    test:['grep -ri "error" /var/log/','grep -v "^#" /etc/nginx/nginx.conf','find /etc -type f -name "*.conf"','grep -n "server_name" /etc/nginx/nginx.conf','find /var/log -name "*.log" -mtime -7'],
+    readMode:[
+      {cmd:'grep -v "^#" /etc/ssh/sshd_config', choices:['Show non-comment lines of sshd_config','Invert ssh connection','Delete comments','Search for # in config'], answer:0},
+      {cmd:'find /etc -name "*.conf" -type f', choices:['Find all .conf files in /etc','Delete all conf files','List conf directories','Count conf files'], answer:0},
+      {cmd:'grep -c "Default deny" /var/log/opnsense.log', choices:['Count "Default deny" occurrences in the log','Copy deny lines','Create deny rules','Comment out deny entries'], answer:0},
+    ],
+    boss:{
+      scenario:'The Grafana Fuji dashboard is noisy. You need to count how many "Default deny" entries are in the OPNsense log before filtering them in LogQL.',
+      steps:[
+        {prompt:'Search for "error" in /var/log/syslog ignoring case', answer:'grep -i "error" /var/log/syslog'},
+        {prompt:'Find all .conf files in /etc (files only)', answer:'find /etc -name "*.conf" -type f'},
+        {prompt:'Count "Default deny" occurrences in /var/log/opnsense.log', answer:'grep -c "Default deny" /var/log/opnsense.log'},
+      ]
+    }
+  },
+  {
+    id: 4, name:'Pipes & Redirection', topic:'Grammar',
+    vocab:['|','>', '>>', '2>', '2>&1', '/dev/null', 'tee'],
+    desc:'This isn\'t vocabulary — it\'s syntax. The punctuation of shell. The pipe | chains commands. Redirection controls where output goes. These make single commands into programs.',
+    lessons:[
+      {
+        cmd:'ps aux | grep nginx', type:'type',
+        explain:'The <strong>pipe |</strong> takes stdout of the left command and feeds it as stdin to the right. ps aux lists all processes; grep nginx filters them. Assembly line.',
+        hint:'ps aux | grep nginx — process list, piped to grep.'
+      },
+      {
+        cmd:'cat /etc/passwd | wc -l', type:'type',
+        explain:'cat dumps the file; wc -l counts lines. You could do wc -l /etc/passwd directly, but this demonstrates the pipe mechanic explicitly.',
+        hint:'cat + pipe + wc -l'
+      },
+      {
+        cmd:'ls -la | grep ".sh"', type:'type',
+        explain:'ls -la lists everything; grep ".sh" filters for shell scripts. Pipes turn ls into a searchable list.',
+        hint:'ls -la piped to grep'
+      },
+      {
+        cmd:'tail -f /var/log/syslog | grep ERROR', type:'type',
+        explain:'Live log following piped through grep. Only lines containing ERROR reach your screen. This is real-world monitoring in one command.',
+        hint:'tail -f + pipe + grep. Real-time filtering.'
+      },
+      {
+        cmd:'ls -la > filelist.txt', type:'type',
+        explain:'<strong>></strong> redirects stdout to a file, overwriting it. The file is created if it doesn\'t exist. This is not append — it wipes and rewrites.',
+        hint:'> overwrites. Redirects output to file.'
+      },
+      {
+        cmd:'echo "backup complete" >> backup.log', type:'type',
+        explain:'<strong>>></strong> appends to a file. Adds to the end without destroying existing content. The script writer\'s friend.',
+        hint:'>> appends. Never overwrites.'
+      },
+      {
+        cmd:'find /var/log -name "*.log" 2>/dev/null', type:'type',
+        explain:'<strong>2></strong> redirects stderr (error output). Permission denied messages go to /dev/null — the void — instead of cluttering your screen.',
+        hint:'2> redirects errors. /dev/null is the trash.'
+      },
+      {
+        cmd:'systemctl status nginx | tee nginx-status.txt', type:'type',
+        explain:'<strong>tee</strong> is a Y-splitter: output goes to your screen AND to the file simultaneously. Named after the T-shaped pipe fitting.',
+        hint:'tee splits output: screen AND file at once.'
+      },
+    ],
+    test:['ps aux | grep ssh','cat /etc/passwd | wc -l','ls -la | grep ".sh"','tail -f /var/log/syslog | grep ERROR','command 2>/dev/null'],
+    readMode:[
+      {cmd:'command 2>/dev/null', choices:['Discard error output','Run command twice','Run in background','Send output to display'], answer:0},
+      {cmd:'echo "done" >> log.txt', choices:['Append "done" to log.txt','Overwrite log.txt','Print done to screen','Echo without newline'], answer:0},
+      {cmd:'systemctl status nginx | tee nginx.txt', choices:['Show nginx status and save it to a file simultaneously','Save nginx status and suppress screen output','Pipe nginx output to null','Restart nginx and log result'], answer:0},
+    ],
+    boss:{
+      scenario:'You need to check which containers are listening on port 80, and save the output to a file for review.',
+      steps:[
+        {prompt:'List all processes and filter for "nginx"', answer:'ps aux | grep nginx'},
+        {prompt:'Redirect the output of ls -la to a file called listing.txt', answer:'ls -la > listing.txt'},
+        {prompt:'Run find on /var/log but discard all error messages', answer:'find /var/log 2>/dev/null'},
+      ]
+    }
+  },
+  {
+    id: 5, name:'Permissions', topic:'Ownership and Access',
+    vocab:['chmod','chown','chgrp','id','whoami','sudo','umask'],
+    desc:'Linux permissions are not optional reading. Wrong permissions on an SSH key will silently break things. Right permissions on a script make it runnable. Learn the numbers.',
+    lessons:[
+      {
+        cmd:'whoami', type:'type',
+        explain:'<strong>whoami</strong> prints your current username. One word, zero arguments. Use it to confirm whether you\'re root or not before doing something permanent.',
+        hint:'One word, no arguments.'
+      },
+      {
+        cmd:'id', type:'type',
+        explain:'<strong>id</strong> shows your uid, gid, and group memberships. More detailed than whoami. Tells you if you\'re in the sudo or docker group.',
+        hint:'Just: id'
+      },
+      {
+        cmd:'chmod +x deploy.sh', type:'type',
+        explain:'<strong>chmod +x</strong> adds execute permission. Without it, a shell script is just a text file. +x makes it runnable. The + means "add", x means "execute".',
+        hint:'chmod +x = make executable.'
+      },
+      {
+        cmd:'chmod 644 config.yml', type:'type',
+        explain:'<strong>644</strong> — owner reads/writes, group reads, others read. Standard for config files and most non-secret files.',
+        hint:'644 = rw-r--r-- = files. Owner full read/write, rest read-only.'
+      },
+      {
+        cmd:'chmod 755 /usr/local/bin/myscript.sh', type:'type',
+        explain:'<strong>755</strong> — owner full access, everyone can read and execute. Standard for scripts and executables in shared locations.',
+        hint:'755 = rwxr-xr-x = scripts/directories.'
+      },
+      {
+        cmd:'chmod 600 ~/.ssh/id_ed25519', type:'type',
+        explain:'<strong>600</strong> — owner reads/writes only. Nothing for group or others. Required for SSH private keys. SSH will refuse to use a key file with wider permissions.',
+        hint:'600 = rw------- = secrets. SSH keys require this.'
+      },
+      {
+        cmd:'chown www-data:www-data /var/www/html/', type:'type',
+        explain:'<strong>chown</strong> changes ownership. Format: user:group. www-data is the nginx/apache user. If nginx doesn\'t own the files, it can\'t serve them.',
+        hint:'chown user:group path'
+      },
+      {
+        cmd:'sudo !!', type:'type',
+        explain:'<strong>sudo !!</strong> — rerun the previous command as root. The most satisfying shell shortcut. Type a command, get permission denied, type sudo !! and pretend you meant to.',
+        hint:'!! = last command. sudo !! = run it as root.'
+      },
+    ],
+    test:['chmod +x deploy.sh','chmod 644 config.yml','chown www-data:www-data /var/www/html/','sudo !!','chmod 600 ~/.ssh/id_ed25519'],
+    readMode:[
+      {cmd:'chmod 600 ~/.ssh/id_ed25519', choices:['Set SSH private key to owner-only read/write','Make SSH key executable','Share SSH key with group','Delete SSH key permissions'], answer:0},
+      {cmd:'sudo !!', choices:['Run the previous command as sudo','Run two sudo commands','Run sudo twice','Show sudo history'], answer:0},
+      {cmd:'chown www-data:www-data /var/www/html/', choices:['Set nginx user as owner of the web root','Check who owns the web root','Change www directory name','Remove ownership of web files'], answer:0},
+    ],
+    boss:{
+      scenario:'The automator SSH key has wrong permissions. SSH is refusing to use it. Also, the web root isn\'t serving because nginx doesn\'t own the files.',
+      steps:[
+        {prompt:'Fix permissions on ~/.ssh/automator_id_ed25519', answer:'chmod 600 ~/.ssh/automator_id_ed25519'},
+        {prompt:'Give www-data ownership of /var/www/html/', answer:'chown www-data:www-data /var/www/html/'},
+        {prompt:'Make /usr/local/bin/backup.sh executable by everyone', answer:'chmod 755 /usr/local/bin/backup.sh'},
+      ]
+    }
+  },
+  {
+    id: 6, name:'Processes & System', topic:'What\'s Running',
+    vocab:['ps','top','htop','kill','jobs','bg','fg','systemctl','journalctl','df','du','free'],
+    desc:'Something is using all your RAM and you don\'t know what. A service should be running and isn\'t. These commands answer those questions.',
+    lessons:[
+      {
+        cmd:'ps aux', type:'type',
+        explain:'<strong>ps aux</strong> — lists all running processes. <span class="t-flag">a</span>=all users, <span class="t-flag">u</span>=user-oriented format (shows username), <span class="t-flag">x</span>=include processes with no terminal. Three letters, three meanings.',
+        hint:'a=all users, u=user format, x=no terminal. All three.'
+      },
+      {
+        cmd:'ps aux | grep nginx', type:'type',
+        explain:'The classic process check. Combine ps aux (everything) with grep (filter) to ask "is nginx actually running?"',
+        hint:'ps aux piped to grep'
+      },
+      {
+        cmd:'kill -15 1234', type:'type',
+        explain:'<strong>kill -15</strong> sends SIGTERM — a polite request to shut down. The process can clean up first. Always try this before -9.',
+        hint:'-15 = SIGTERM = polite shutdown. PID number last.'
+      },
+      {
+        cmd:'kill -9 1234', type:'type',
+        explain:'<strong>kill -9</strong> sends SIGKILL — immediate termination, no cleanup. Process cannot catch or ignore it. Last resort.',
+        hint:'-9 = SIGKILL = force kill. Last resort.'
+      },
+      {
+        cmd:'systemctl status nginx', type:'type',
+        explain:'<strong>systemctl status</strong> — shows if a service is running, recent logs, its PID. The first command to run when something seems wrong.',
+        hint:'systemctl status + service name'
+      },
+      {
+        cmd:'systemctl restart nginx', type:'type',
+        explain:'<strong>systemctl restart</strong> stops and starts the service. The five verbs: status, start, stop, restart, enable, disable.',
+        hint:'systemctl restart + service name'
+      },
+      {
+        cmd:'journalctl -u nginx -n 50', type:'type',
+        explain:'<strong>journalctl</strong> reads the systemd journal. <span class="t-flag">-u nginx</span> filters to the nginx unit. <span class="t-flag">-n 50</span> shows last 50 entries. Pattern matches tail -n exactly.',
+        hint:'-u = unit (service name). -n = number of lines.'
+      },
+      {
+        cmd:'journalctl -f', type:'type',
+        explain:'<strong>journalctl -f</strong> — follow the journal in real time. Same -f as tail -f, same behavior, system-wide.',
+        hint:'-f = follow. Live output. Same as tail -f.'
+      },
+      {
+        cmd:'df -h', type:'type',
+        explain:'<strong>df -h</strong> — disk free, human-readable. Shows mounted filesystems and how full they are. <span class="t-flag">-h</span> from the decoder ring.',
+        hint:'-h = human-readable. Disk free.'
+      },
+      {
+        cmd:'du -sh *', type:'type',
+        explain:'<strong>du -sh *</strong> — disk usage, summary, human-readable, everything in current directory. "How big is each thing here?" -s = summary (one line per item).',
+        hint:'-s = summary, -h = human-readable, * = everything here'
+      },
+    ],
+    test:['ps aux | grep nginx','systemctl status nginx','journalctl -f','df -h','kill -9 1234','du -sh *'],
+    readMode:[
+      {cmd:'journalctl -u ntfy -n 20', choices:['Show last 20 log lines for ntfy service','Follow ntfy logs','Show 20 ntfy processes','Enable ntfy service'], answer:0},
+      {cmd:'kill -9 4512', choices:['Force-kill process with PID 4512','Send process 4512 a polite shutdown','Stop service 9','Kill all processes'], answer:0},
+      {cmd:'du -sh *', choices:['Show size of everything in current directory','Delete files over size limit','Show hidden disk usage','Display user shares'], answer:0},
+    ],
+    boss:{
+      scenario:'ntfy on CT109 is acting up. You need to check if it\'s running, read its recent logs, and confirm disk space isn\'t the issue.',
+      steps:[
+        {prompt:'Check status of the ntfy service', answer:'systemctl status ntfy'},
+        {prompt:'Show last 20 journal entries for ntfy', answer:'journalctl -u ntfy -n 20'},
+        {prompt:'Show disk usage in human-readable format', answer:'df -h'},
+      ]
+    }
+  },
+  {
+    id: 7, name:'Networking', topic:'Connectivity and Transfer',
+    vocab:['ping','curl','wget','ssh','scp','rsync','ip','ss','dig'],
+    desc:'Your services exist on a network. You need to reach them, test them, and move files between them.',
+    lessons:[
+      {
+        cmd:'curl -s https://eastslide.com', type:'type',
+        explain:'<strong>curl</strong> makes HTTP requests. <span class="t-flag">-s</span> = silent (no progress bar). Returns the response body. Your Swiss Army HTTP knife.',
+        hint:'-s = silent. No progress clutter.'
+      },
+      {
+        cmd:'curl -I https://eastslide.com', type:'type',
+        explain:'<strong>curl -I</strong> — headers only. Sends a HEAD request. Shows status code, Content-Type, server headers without downloading the body.',
+        hint:'-I = headers only. I = Information.'
+      },
+      {
+        cmd:'curl -L https://eastslide.com', type:'type',
+        explain:'<strong>curl -L</strong> — follow redirects. Without -L, curl stops at a 301/302. With -L, it follows the chain.',
+        hint:'-L = follow redirects (Location header).'
+      },
+      {
+        cmd:'dig +short vault.eastslide.com', type:'type',
+        explain:'<strong>dig</strong> — DNS lookup. <span class="t-flag">+short</span> suppresses verbose output, just gives the answer. The correct tool for "is this DNS record actually resolving?"',
+        hint:'+short = minimal output, just the answer.'
+      },
+      {
+        cmd:'dig +short vault.eastslide.com @192.168.10.1', type:'type',
+        explain:'Same dig, but querying a specific DNS server (your Unbound instance on MKSenze). Tests split-horizon: does your internal DNS override work?',
+        hint:'@IP = query this specific DNS server.'
+      },
+      {
+        cmd:'ss -tulpn', type:'type',
+        explain:'<strong>ss</strong> shows socket statistics. <span class="t-flag">t</span>=TCP, <span class="t-flag">u</span>=UDP, <span class="t-flag">l</span>=listening, <span class="t-flag">p</span>=process, <span class="t-flag">n</span>=numeric. Like ps aux for network ports.',
+        hint:'t=TCP u=UDP l=listening p=process n=numeric. Five letters.'
+      },
+      {
+        cmd:'ssh -i ~/.ssh/automator_id_ed25519 automator@192.168.10.21', type:'type',
+        explain:'<strong>ssh -i</strong> specifies the identity file (key). Without -i, ssh tries your default keys. When using a named key like automator, you must specify it.',
+        hint:'-i = identity file (your key). Specify when using non-default key.'
+      },
+      {
+        cmd:'rsync -av /opt/backup/ root@192.168.10.10:/mnt/storage/', type:'type',
+        explain:'<strong>rsync -av</strong> — archive and verbose. -a preserves permissions, timestamps, symlinks, ownership. -v shows what it\'s doing. The right way to copy between servers.',
+        hint:'-a = archive (preserves everything), -v = verbose'
+      },
+      {
+        cmd:'rsync -av -n /opt/backup/ root@192.168.10.10:/mnt/storage/', type:'type',
+        explain:'<strong>rsync -n</strong> — dry run. Shows exactly what would happen without actually doing it. Always run -n first. Always.',
+        hint:'-n = dry run. See without doing.'
+      },
+    ],
+    test:['curl -s https://eastslide.com','ssh -i ~/.ssh/automator_id_ed25519 automator@192.168.10.21','rsync -av /opt/backup/ root@192.168.10.10:/mnt/storage/','ss -tulpn','dig +short vault.eastslide.com @192.168.10.1'],
+    readMode:[
+      {cmd:'dig +short vault.eastslide.com @192.168.10.1', choices:['Query Unbound for the vault.eastslide.com DNS record','Ping the vault server','Show vault firewall rules','Test SSL certificate for vault'], answer:0},
+      {cmd:'ss -tulpn', choices:['Show all listening TCP/UDP ports with process info','Show ssh tunnel connections','List all users logged in','Display system uptime'], answer:0},
+      {cmd:'rsync -av -n /opt/backup/ remote:/mnt/', choices:['Dry-run an rsync to see what would transfer','Copy files silently','Sync with archive only','Remove files from backup'], answer:0},
+    ],
+    boss:{
+      scenario:'You need to verify Unbound split-horizon DNS is resolving vault.eastslide.com correctly, then confirm which port Vaultwarden is listening on.',
+      steps:[
+        {prompt:'Query MKSenze DNS for vault.eastslide.com resolution', answer:'dig +short vault.eastslide.com @192.168.10.1'},
+        {prompt:'Check all listening ports on the current machine', answer:'ss -tulpn'},
+        {prompt:'Curl the headers of https://vault.eastslide.com silently', answer:'curl -sI https://vault.eastslide.com'},
+      ]
+    }
+  },
+  {
+    id: 8, name:'Text Processing', topic:'sed, awk, cut, and friends',
+    vocab:['echo','cut','sort','uniq','tr','sed','awk','xargs','column'],
+    desc:'Data comes out of commands as text. Text processing tools reshape that text into what you actually need. This is where the shell starts feeling like programming.',
+    lessons:[
+      {
+        cmd:'echo $USER', type:'type',
+        explain:'<strong>echo</strong> prints to stdout. <strong>$USER</strong> is an environment variable — the shell substitutes its value. The dollar sign means "expand this variable."',
+        hint:'echo $USER — dollar sign before the variable name.'
+      },
+      {
+        cmd:'cut -d: -f1 /etc/passwd', type:'type',
+        explain:'<strong>cut</strong> slices fields from each line. <span class="t-flag">-d:</span> sets delimiter to colon. <span class="t-flag">-f1</span> takes field 1. /etc/passwd is colon-delimited — this extracts just the usernames.',
+        hint:'-d = delimiter, -f = field number.'
+      },
+      {
+        cmd:'sort -rn results.txt', type:'type',
+        explain:'<strong>sort -rn</strong> — reverse numeric sort. <span class="t-flag">-r</span> = reverse (descending). <span class="t-flag">-n</span> = numeric (treats numbers as numbers, not strings).',
+        hint:'-r = reverse, -n = numeric sort.'
+      },
+      {
+        cmd:'sort -u names.txt', type:'type',
+        explain:'<strong>sort -u</strong> — sort and deduplicate. -u = unique. Equivalent to sort | uniq in one flag.',
+        hint:'-u = unique. Sort and deduplicate.'
+      },
+      {
+        cmd:"sed 's/old/new/g' config.txt", type:'type',
+        explain:'<strong>sed</strong> — stream editor. The s command: substitute. Pattern: s/find/replace/g — the g flag means all occurrences on each line, not just the first.',
+        hint:"sed 's/old/new/g' — quote the expression."
+      },
+      {
+        cmd:"sed -i 's/localhost/192.168.10.21/g' nginx.conf", type:'type',
+        explain:'<strong>sed -i</strong> — in-place edit. Modifies the actual file, not just stdout. The most common sed use in real ops work.',
+        hint:"-i = in-place edit. Actually changes the file."
+      },
+      {
+        cmd:"awk '{print $1}' access.log", type:'type',
+        explain:'<strong>awk</strong> processes text field by field. <span class="t-flag">$1</span> is the first whitespace-delimited field. Prints column 1 of every line.',
+        hint:"awk '{print $1}' — single quotes around the program."
+      },
+      {
+        cmd:"awk -F: '{print $1}' /etc/passwd", type:'type',
+        explain:'<strong>awk -F:</strong> — set field separator to colon. Same result as cut -d: -f1, but awk can do much more (math, conditionals, multi-field output).',
+        hint:"-F = field separator. Like cut -d but more powerful."
+      },
+      {
+        cmd:"ps aux | awk '{print $1}' | sort | uniq -c | sort -rn", type:'type',
+        explain:'A real pipeline: ps aux outputs all processes → awk extracts the username field → sort orders them → uniq -c counts each → sort -rn puts the most common first. Five commands, four pipes, one sentence.',
+        hint:'Five commands chained. awk extracts column, then count and sort.'
+      },
+    ],
+    test:["sed 's/old/new/g' config.txt","cut -d: -f1 /etc/passwd","sort -rn results.txt","awk '{print $1}' access.log","find /etc | xargs grep 'eastslide'"],
+    readMode:[
+      {cmd:"sed -i 's/localhost/192.168.10.21/g' app.conf", choices:['Replace localhost with IP in-place in app.conf','Show localhost entries','Delete localhost from file','Backup app.conf'], answer:0},
+      {cmd:"awk -F: '{print $1}' /etc/passwd", choices:['Print usernames from /etc/passwd using colon delimiter','Print line 1 of passwd','Set field 1 to colon','Filter empty fields'], answer:0},
+      {cmd:"ps aux | awk '{print $1}' | sort | uniq -c | sort -rn", choices:['Count and rank processes by user, most frequent first','List unique processes','Sort processes alphabetically','Show process IDs only'], answer:0},
+    ],
+    boss:{
+      scenario:'The Grafana dashboard is pulling noisy log data. You need to count and rank the most common log message prefixes in /var/log/syslog.',
+      steps:[
+        {prompt:'Extract field 1 (colon-delimited) from /etc/passwd', answer:'cut -d: -f1 /etc/passwd'},
+        {prompt:"Replace 'debug' with 'info' in-place in /etc/app.conf", answer:"sed -i 's/debug/info/g' /etc/app.conf"},
+        {prompt:"Extract first column from access.log using awk", answer:"awk '{print $1}' access.log"},
+      ]
+    }
+  },
+  {
+    id: 9, name:'Shell & Scripts', topic:'Meta',
+    vocab:['alias','export','source','history','!!','$PATH','$HOME','&&','||',';','chmod +x'],
+    desc:'The shell itself is programmable. Variables, aliases, command chaining, and scripts. This is where isolated commands become repeatable workflows.',
+    lessons:[
+      {
+        cmd:'echo $PATH', type:'type',
+        explain:'<strong>$PATH</strong> is the list of directories the shell searches for executables. Colon-separated. When you type "nginx", the shell looks here.',
+        hint:'echo $PATH — see where the shell looks for commands.'
+      },
+      {
+        cmd:'echo $HOME', type:'type',
+        explain:'<strong>$HOME</strong> is your home directory. Same as ~ in paths. $USER, $HOME, $PWD — the fundamental shell variables.',
+        hint:'echo $HOME — tilde is just a shortcut for this.'
+      },
+      {
+        cmd:'history | grep ssh', type:'type',
+        explain:'<strong>history</strong> shows your command history. Pipe to grep to find a specific command you remember typing but can\'t quite recall.',
+        hint:'history | grep pattern'
+      },
+      {
+        cmd:'source ~/.bashrc', type:'type',
+        explain:'<strong>source</strong> (or <strong>.</strong>) runs a file in the current shell session, not a subshell. Used to reload .bashrc or .profile after editing them without logging out.',
+        hint:'source = reload config in current shell. Or just: . ~/.bashrc'
+      },
+      {
+        cmd:'chmod +x deploy.sh && ./deploy.sh', type:'type',
+        explain:'<strong>&&</strong> = "and then, but only if the first succeeded." Make executable AND run it — but only if chmod succeeded. If chmod fails, the script doesn\'t run.',
+        hint:'&& = conditional chain. Second runs only if first succeeds.'
+      },
+      {
+        cmd:'apt update && apt upgrade -y', type:'type',
+        explain:'The classic && chain. Update the package list, then upgrade — but only if the update succeeded. Prevents upgrading against a stale list.',
+        hint:'Standard update chain. && ties them together.'
+      },
+      {
+        cmd:'mkdir /opt/app || echo "directory already exists"', type:'type',
+        explain:'<strong>||</strong> = "or, if the first failed." If mkdir fails (directory exists), run the echo instead. The fallback operator.',
+        hint:'|| = or. Runs if the first command fails.'
+      },
+      {
+        cmd:'ssh-copy-id -i ~/.ssh/automator_id_ed25519.pub automator@192.168.10.21 && ssh -i ~/.ssh/automator_id_ed25519 automator@192.168.10.21', type:'type',
+        explain:'The full automator key deployment chain. Copy the key to CT101 AND then test the connection immediately. One line, two steps, conditional execution.',
+        hint:'ssh-copy-id then && ssh to confirm. Both must succeed.'
+      },
+    ],
+    test:['echo $PATH','history | grep ssh','source ~/.bashrc','chmod +x deploy.sh && ./deploy.sh','mkdir /opt/app || echo "directory already exists"'],
+    readMode:[
+      {cmd:'chmod +x script.sh && ./script.sh', choices:['Make script executable then run it if chmod succeeded','Run script.sh as chmod','Make script and ignore errors','Execute with elevated privileges'], answer:0},
+      {cmd:'mkdir /opt/app || echo "directory already exists"', choices:['Create directory or print message if it fails','Make directory and echo path','Create and log directory','Run mkdir twice'], answer:0},
+      {cmd:'source ~/.bashrc', choices:['Reload .bashrc in the current shell session','Open a new shell','Source code for bash','Show bashrc contents'], answer:0},
+    ],
+    boss:{
+      scenario:'Final boss. Stand up CT108 (static web host) from scratch. Every step must be correct before the next unlocks.',
+      steps:[
+        {prompt:'Create /var/www/html and all parents in one command', answer:'mkdir -p /var/www/html'},
+        {prompt:'Create index.html in /var/www/html/', answer:'touch /var/www/html/index.html'},
+        {prompt:'Set correct permissions on /var/www/html/', answer:'chmod 755 /var/www/html/'},
+        {prompt:'Give www-data ownership of /var/www/html/', answer:'chown www-data:www-data /var/www/html/'},
+        {prompt:'Verify nginx is running', answer:'systemctl status nginx'},
+        {prompt:'Curl the local web server silently', answer:'curl -s http://localhost'},
+      ]
+    }
+  },
+];
+
+// Combat pool — commands with plain-English descriptions
+const COMBAT_POOL = [
+  {cmd:'ls -la', desc:'Long listing including hidden files', group:0},
+  {cmd:'cd ..', desc:'Go up one directory', group:0},
+  {cmd:'pwd', desc:'Print current directory path', group:0},
+  {cmd:'rm -rf /tmp/old', desc:'Recursively force-delete /tmp/old', group:1},
+  {cmd:'mkdir -p /opt/x/y', desc:'Create full directory path', group:1},
+  {cmd:'cp -r src/ dst/', desc:'Recursively copy directory', group:1},
+  {cmd:'tail -f /var/log/syslog', desc:'Follow syslog in real time', group:2},
+  {cmd:'wc -l file.txt', desc:'Count lines in file.txt', group:2},
+  {cmd:'head -n 20 access.log', desc:'Show first 20 lines of access.log', group:2},
+  {cmd:'grep -ri error /var/log/', desc:'Case-insensitive recursive error search', group:3},
+  {cmd:'find /etc -name "*.conf"', desc:'Find all .conf files in /etc', group:3},
+  {cmd:'grep -c "GET" access.log', desc:'Count GET requests in access.log', group:3},
+  {cmd:'ps aux | grep nginx', desc:'Find nginx in running processes', group:4},
+  {cmd:'ls -la > list.txt', desc:'Save long listing to list.txt', group:4},
+  {cmd:'echo done >> log.txt', desc:'Append "done" to log.txt', group:4},
+  {cmd:'chmod 600 ~/.ssh/id_ed25519', desc:'Lock down SSH private key permissions', group:5},
+  {cmd:'chown www-data:www-data /var/www/html/', desc:'Give nginx user ownership of web root', group:5},
+  {cmd:'chmod 755 /usr/local/bin/script.sh', desc:'Make script executable by all', group:5},
+  {cmd:'systemctl status nginx', desc:'Check nginx service status', group:6},
+  {cmd:'journalctl -u nginx -n 50', desc:'Show last 50 nginx log entries', group:6},
+  {cmd:'df -h', desc:'Show disk usage in human-readable format', group:6},
+  {cmd:'kill -9 1234', desc:'Force-kill process 1234', group:6},
+  {cmd:'ss -tulpn', desc:'Show all listening network ports', group:7},
+  {cmd:'dig +short vault.eastslide.com @192.168.10.1', desc:'Query Unbound DNS for vault subdomain', group:7},
+  {cmd:'rsync -av -n /src/ remote:/dst/', desc:'Dry-run rsync to see what would transfer', group:7},
+  {cmd:"sed -i 's/old/new/g' file.conf", desc:'In-place replace old with new in file.conf', group:8},
+  {cmd:"awk '{print $1}' access.log", desc:'Print first column of access.log', group:8},
+  {cmd:'cut -d: -f1 /etc/passwd', desc:'Extract usernames from /etc/passwd', group:8},
+  {cmd:'chmod +x script.sh && ./script.sh', desc:'Make executable then run if successful', group:9},
+  {cmd:'history | grep ssh', desc:'Search command history for ssh', group:9},
+  {cmd:'source ~/.bashrc', desc:'Reload bashrc in current shell', group:9},
+];
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let state = {
+  xp: 0, streak: 0, level: 1,
+  groupProgress: {}, // groupId -> {phase, lessonIdx, bossStep, complete}
+  totalAnswered: 0, totalCorrect: 0,
+};
+
+function loadState() {
+  try {
+    const s = localStorage.getItem('shellquest_v2');
+    if (s) state = JSON.parse(s);
+  } catch(e) {}
+  renderHeader();
+}
+
+function saveState() {
+  localStorage.setItem('shellquest_v2', JSON.stringify(state));
+  renderHeader();
+}
+
+function confirmReset() {
+  if (confirm('Reset ALL progress? This cannot be undone.')) {
+    localStorage.removeItem('shellquest_v2');
+    state = {xp:0, streak:0, level:1, groupProgress:{}, totalAnswered:0, totalCorrect:0};
+    saveState();
+    showScreen('scWelcome');
+    toast('Progress reset. Fresh start.');
+  }
+}
+
+// ═══════════════════════════════════════
+// XP & LEVEL
+// ═══════════════════════════════════════
+const XP_PER_LEVEL = 200;
+
+function addXP(amount) {
+  state.xp += amount;
+  const newLevel = Math.floor(state.xp / XP_PER_LEVEL) + 1;
+  if (newLevel > state.level) {
+    state.level = newLevel;
+    toast(`LEVEL UP! You're now Level ${state.level}`);
+  }
+  renderHeader();
+}
+
+function renderHeader() {
+  document.getElementById('statXP').textContent = state.xp;
+  document.getElementById('statStreak').textContent = state.streak;
+  document.getElementById('statLevel').textContent = state.level;
+  const pct = ((state.xp % XP_PER_LEVEL) / XP_PER_LEVEL) * 100;
+  document.getElementById('xpBar').style.width = pct + '%';
+}
+
+// ═══════════════════════════════════════
+// CANVAS SCENE
+// ═══════════════════════════════════════
+const scene = document.getElementById('scene');
+const ctx = scene.getContext('2d');
+let sceneFrame = 0;
+let particles = [];
+let heroState = 'idle'; // idle, attack, hurt
+let enemyState = 'idle'; // idle, hurt, dead
+let enemyHpPct = 1;
+let bossMode = false;
+
+function drawScene() {
+  const W = 900, H = 120;
+  ctx.fillStyle = '#0a0e17';
+  ctx.fillRect(0, 0, W, H);
+
+  // ground line
+  ctx.strokeStyle = '#1e2d40';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, H-20); ctx.lineTo(W, H-20); ctx.stroke();
+
+  // stars
+  ctx.fillStyle = '#1e2d40';
+  for (let i = 0; i < 40; i++) {
+    const sx = (i * 137.5 + sceneFrame*0.2) % W;
+    const sy = (i * 53.7) % (H - 40);
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+
+  // hero (left)
+  drawHero(60, H-20);
+
+  // enemy (right)
+  if (enemyState !== 'dead') {
+    drawEnemy(W - 100, H-20, bossMode);
+  }
+
+  // HP bar over enemy
+  if (enemyState !== 'dead') {
+    ctx.fillStyle = '#1e2d40';
+    ctx.fillRect(W-150, 10, 100, 6);
+    ctx.fillStyle = enemyHpPct > 0.5 ? '#00ff88' : enemyHpPct > 0.25 ? '#ffd700' : '#ff4455';
+    ctx.fillRect(W-150, 10, 100 * enemyHpPct, 6);
+  }
+
+  // particles
+  particles = particles.filter(p => p.life > 0);
+  particles.forEach(p => {
+    ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.life/p.maxLife})`;
+    ctx.fillRect(p.x, p.y, 3, 3);
+    p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--;
+  });
+
+  sceneFrame++;
+}
+
+function drawHero(x, y) {
+  const bob = heroState === 'idle' ? Math.sin(sceneFrame * 0.05) * 1.5 : 0;
+  const oy = y - bob;
+  // body
+  ctx.fillStyle = heroState === 'hurt' ? '#ff4455' : '#00d4ff';
+  ctx.fillRect(x-6, oy-28, 12, 16);
+  // head
+  ctx.fillStyle = '#c8d8e8';
+  ctx.fillRect(x-5, oy-40, 10, 10);
+  // legs
+  const legSwing = heroState === 'idle' ? Math.sin(sceneFrame * 0.1) * 3 : 0;
+  ctx.fillStyle = '#1e2d40';
+  ctx.fillRect(x-5, oy-12, 4, 12 + legSwing);
+  ctx.fillRect(x+1, oy-12, 4, 12 - legSwing);
+  // sword (attack)
+  if (heroState === 'attack') {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(x+10, oy-35, 30, 3);
+    ctx.fillStyle = '#c8d8e8';
+    ctx.fillRect(x+6, oy-32, 4, 8);
+  }
+}
+
+function drawEnemy(x, y, boss) {
+  const bob = enemyState === 'idle' ? Math.sin(sceneFrame * 0.07 + 1) * 1.5 : 0;
+  const oy = y - bob;
+  const size = boss ? 1.6 : 1;
+  const w = Math.floor(16 * size), h = Math.floor(20 * size);
+  // body
+  ctx.fillStyle = enemyState === 'hurt' ? '#ffffff' : (boss ? '#b06eff' : '#ff4455');
+  ctx.fillRect(x - w/2, oy - h, w, h);
+  // eyes
+  ctx.fillStyle = '#ffd700';
+  ctx.fillRect(x - w/2 + 3, oy - h + 4, 3, 3);
+  ctx.fillRect(x + w/2 - 6, oy - h + 4, 3, 3);
+  // horns (boss)
+  if (boss) {
+    ctx.fillStyle = '#b06eff';
+    ctx.fillRect(x - 10, oy - h - 8, 4, 8);
+    ctx.fillRect(x + 6,  oy - h - 8, 4, 8);
+  }
+}
+
+function spawnParticles(x, y, color, count) {
+  const [r,g,b] = color;
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random()-0.5)*5,
+      vy: (Math.random()-2)*4,
+      r, g, b,
+      life: 20 + Math.random()*20,
+      maxLife: 40,
+    });
+  }
+}
+
+function heroAttack() {
+  heroState = 'attack';
+  spawnParticles(820, 90, [255,215,0], 12);
+  setTimeout(() => { heroState = 'idle'; }, 400);
+}
+
+function enemyHurt() {
+  enemyState = 'hurt';
+  spawnParticles(820, 90, [255,68,85], 8);
+  setTimeout(() => { enemyState = 'idle'; }, 300);
+}
+
+function enemyDie() {
+  enemyState = 'dead';
+  spawnParticles(820, 90, [176,110,255], 30);
+}
+
+setInterval(drawScene, 50);
+
+// ═══════════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function startGame() { showGroupSelect(); }
+
+// ═══════════════════════════════════════
+// DECODER RING
+// ═══════════════════════════════════════
+function showDecoder() {
+  const grid = document.getElementById('decoderGrid');
+  grid.innerHTML = '';
+  DECODER.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'decoder-row';
+    row.innerHTML = `<span class="decoder-flag">${d.flag}</span> — <span class="decoder-meaning">${d.meaning}</span><br><span class="decoder-examples">${d.ex}</span>`;
+    grid.appendChild(row);
+  });
+  showScreen('scDecoder');
+}
+
+// ═══════════════════════════════════════
+// GROUP SELECT
+// ═══════════════════════════════════════
+function showGroupSelect() {
+  const grid = document.getElementById('groupGrid');
+  grid.innerHTML = '';
+  GROUPS.forEach((g, i) => {
+    const prog = state.groupProgress[g.id] || {};
+    const prev = i === 0 || (state.groupProgress[GROUPS[i-1].id] || {}).complete;
+    const locked = !prev;
+    const complete = !!prog.complete;
+    const card = document.createElement('div');
+    card.className = 'group-card' + (locked ? ' locked' : '') + (complete ? ' complete' : '');
+    card.innerHTML = `
+      <div class="group-num">G${String(g.id+1).padStart(2,'0')}</div>
+      <div class="group-name">${g.name}</div>
+      <div class="group-vocab">${g.topic}</div>
+      <div class="group-badge">${complete ? '✓' : locked ? '🔒' : '▶'}</div>
+    `;
+    if (!locked) card.onclick = () => startGroup(g.id);
+    grid.appendChild(card);
+  });
+  showScreen('scGroups');
+}
+
+// ═══════════════════════════════════════
+// LESSON ENGINE
+// ═══════════════════════════════════════
+let currentGroup = null;
+let currentPhase = null; // 'practice1','practice2','test','readmode','boss','combat'
+let currentIdx = 0;
+let currentItems = [];
+let timerInterval = null;
+let timerSeconds = 0;
+let timerMax = 5;
+let testErrors = 0;
+let testTotal = 0;
+
+function startGroup(groupId) {
+  currentGroup = GROUPS[groupId];
+  bossMode = groupId === 9;
+  const prog = state.groupProgress[groupId] || {};
+  state.groupProgress[groupId] = prog;
+
+  // Determine phase
+  if (!prog.phase) prog.phase = 'practice1';
+
+  switch(prog.phase) {
+    case 'practice1': startPractice('practice1'); break;
+    case 'practice2': startPractice('practice2'); break;
+    case 'test':      startTest(); break;
+    case 'readmode':  startReadMode(); break;
+    case 'combat':    startCombat(); break;
+    case 'boss':      startBoss(); break;
+    default:          startPractice('practice1');
+  }
+}
+
+// ─── PRACTICE ───
+function startPractice(phase) {
+  currentPhase = phase;
+  currentItems = [...currentGroup.lessons];
+  currentIdx = 0;
+  state.groupProgress[currentGroup.id].phase = phase;
+  saveState();
+  showLessonStep();
+}
+
+function showLessonStep() {
+  const item = currentItems[currentIdx];
+  if (!item) {
+    // Finished all lessons in practice
+    if (currentPhase === 'practice1') {
+      showPhaseResult('practice1');
+    } else {
+      // practice2 done -> test
+      state.groupProgress[currentGroup.id].phase = 'test';
+      saveState();
+      startTest();
+    }
+    return;
+  }
+
+  showScreen('scLesson');
+  document.getElementById('typeModeArea').style.display = '';
+  document.getElementById('readModeArea').style.display = 'none';
+  document.getElementById('timerWrap').style.display = 'none';
+
+  const badge = document.getElementById('phaseBadge');
+  badge.className = 'phase-badge ' + (currentPhase === 'practice1' ? 'phase-practice' : 'phase-practice');
+  badge.textContent = currentPhase === 'practice1' ? '📖 PRACTICE 1' : '📖 PRACTICE 2';
+
+  document.getElementById('lessonCrumb').innerHTML = `// <span>Group ${currentGroup.id+1}: ${currentGroup.name}</span> — ${currentPhase}`;
+  document.getElementById('lessonTitle').textContent = `${currentGroup.name} — ${currentGroup.topic}`;
+  document.getElementById('lessonDesc').textContent = currentGroup.desc;
+  document.getElementById('explainBox').innerHTML = item.explain;
+
+  // Progress dots
+  renderDots('progressDots', currentItems.length, currentIdx);
+
+  renderPrompt(item.cmd);
+  const inp = document.getElementById('cmdInput');
+  inp.value = '';
+  inp.className = '';
+  document.getElementById('feedbackBox').textContent = '';
+  document.getElementById('feedbackBox').className = 'feedback';
+  inp.focus();
+  inp.onkeydown = (e) => { if (e.key === 'Enter') checkPractice(item); };
+}
+
+function checkPractice(item) {
+  const inp = document.getElementById('cmdInput');
+  const val = inp.value.trim();
+  const fb = document.getElementById('feedbackBox');
+
+  if (val === item.cmd) {
+    inp.className = 'correct';
+    fb.textContent = '✓ Correct!';
+    fb.className = 'feedback ok';
+    state.streak++;
+    state.totalAnswered++;
+    state.totalCorrect++;
+    addXP(5);
+    saveState();
+    heroAttack();
+    setTimeout(() => { currentIdx++; showLessonStep(); }, 700);
+  } else {
+    inp.className = 'wrong';
+    fb.innerHTML = `✗ Expected: <span style="color:var(--yellow)">${item.cmd}</span><br><span style="color:var(--dim);font-size:0.75rem">Hint: ${item.hint}</span>`;
+    fb.className = 'feedback err';
+    state.streak = 0;
+    state.totalAnswered++;
+    saveState();
+    setTimeout(() => { inp.className=''; inp.value=''; }, 600);
+  }
+}
+
+// ─── TEST ───
+function startTest() {
+  currentPhase = 'test';
+  currentItems = [...currentGroup.test].map(cmd => ({cmd, type:'type', explain:'', hint:''}));
+  currentIdx = 0;
+  testErrors = 0;
+  testTotal = currentItems.length;
+  showScreen('scLesson');
+  showTestStep();
+}
+
+function showTestStep() {
+  if (currentIdx >= currentItems.length) {
+    // Test complete
+    const pct = Math.round(((testTotal - testErrors) / testTotal) * 100);
+    if (pct >= 60) {
+      state.groupProgress[currentGroup.id].phase = 'readmode';
+      saveState();
+      showPhaseResult('test-pass', pct);
+    } else {
+      showPhaseResult('test-fail', pct);
+    }
+    return;
+  }
+
+  const item = currentItems[currentIdx];
+  showScreen('scLesson');
+  document.getElementById('typeModeArea').style.display = '';
+  document.getElementById('readModeArea').style.display = 'none';
+  document.getElementById('timerWrap').style.display = '';
+
+  const badge = document.getElementById('phaseBadge');
+  badge.className = 'phase-badge phase-test';
+  badge.textContent = '⏱ TIMED TEST';
+
+  document.getElementById('lessonTitle').textContent = `Test — ${currentGroup.name}`;
+  document.getElementById('lessonDesc').textContent = 'Type each command exactly. 5 seconds per command.';
+  document.getElementById('explainBox').innerHTML = '';
+  renderDots('progressDots', currentItems.length, currentIdx);
+  renderPrompt(item.cmd);
+
+  const inp = document.getElementById('cmdInput');
+  inp.value = '';
+  inp.className = '';
+  document.getElementById('feedbackBox').textContent = '';
+  inp.focus();
+  inp.onkeydown = (e) => { if (e.key === 'Enter') checkTest(item); };
+
+  startTimer(5, () => {
+    // Time up
+    testErrors++;
+    state.totalAnswered++;
+    state.streak = 0;
+    const fb = document.getElementById('feedbackBox');
+    fb.innerHTML = `⏰ Time! Expected: <span style="color:var(--yellow)">${item.cmd}</span>`;
+    fb.className = 'feedback err';
+    currentIdx++;
+    setTimeout(showTestStep, 900);
+  });
+}
+
+function checkTest(item) {
+  stopTimer();
+  const inp = document.getElementById('cmdInput');
+  const val = inp.value.trim();
+  const fb = document.getElementById('feedbackBox');
+
+  if (val === item.cmd) {
+    inp.className = 'correct';
+    fb.textContent = '✓';
+    fb.className = 'feedback ok';
+    state.totalAnswered++;
+    state.totalCorrect++;
+    state.streak++;
+    addXP(10);
+    heroAttack();
+  } else {
+    inp.className = 'wrong';
+    testErrors++;
+    fb.innerHTML = `✗ Expected: <span style="color:var(--yellow)">${item.cmd}</span>`;
+    fb.className = 'feedback err';
+    state.totalAnswered++;
+    state.streak = 0;
+  }
+  saveState();
+  currentIdx++;
+  setTimeout(showTestStep, 800);
+}
+
+// ─── TIMER ───
+let timerCtxs = {};
+
+function startTimer(seconds, onExpire) {
+  timerMax = seconds;
+  timerSeconds = seconds;
+  const canvas = document.getElementById('timerCanvas');
+  if (!canvas) return;
+  if (timerInterval) clearInterval(timerInterval);
+  drawTimer(canvas, timerSeconds, timerMax);
+  timerInterval = setInterval(() => {
+    timerSeconds--;
+    drawTimer(canvas, timerSeconds, timerMax);
+    if (timerSeconds <= 0) {
+      stopTimer();
+      onExpire();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
+
+function drawTimer(canvas, remaining, max) {
+  const c = canvas.getContext('2d');
+  c.clearRect(0, 0, 44, 44);
+  // background arc
+  c.beginPath();
+  c.arc(22, 22, 18, 0, Math.PI * 2);
+  c.strokeStyle = '#1e2d40';
+  c.lineWidth = 4;
+  c.stroke();
+  // progress arc
+  const pct = remaining / max;
+  const color = pct > 0.5 ? '#00ff88' : pct > 0.25 ? '#ffd700' : '#ff4455';
+  c.beginPath();
+  c.arc(22, 22, 18, -Math.PI/2, -Math.PI/2 + pct * Math.PI * 2);
+  c.strokeStyle = color;
+  c.lineWidth = 4;
+  c.stroke();
+  // number
+  c.fillStyle = color;
+  c.font = 'bold 14px Share Tech Mono';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(remaining, 22, 22);
+}
+
+// ─── READ MODE ───
+function startReadMode() {
+  currentPhase = 'readmode';
+  currentItems = [...currentGroup.readMode];
+  currentIdx = 0;
+  showReadModeStep();
+}
+
+function showReadModeStep() {
+  if (currentIdx >= currentItems.length) {
+    state.groupProgress[currentGroup.id].phase = 'combat';
+    saveState();
+    startCombat();
+    return;
+  }
+
+  const item = currentItems[currentIdx];
+  showScreen('scLesson');
+  document.getElementById('typeModeArea').style.display = 'none';
+  document.getElementById('readModeArea').style.display = '';
+
+  const badge = document.getElementById('phaseBadge');
+  badge.className = 'phase-badge phase-readmode';
+  badge.textContent = '🧠 WHAT DOES THIS DO?';
+  document.getElementById('lessonTitle').textContent = `Read Mode — ${currentGroup.name}`;
+  document.getElementById('lessonDesc').textContent = 'You can type it. Now prove you can read it. Pick the correct description.';
+  document.getElementById('explainBox').innerHTML = '';
+  renderDots('progressDots', currentItems.length, currentIdx);
+
+  document.getElementById('readPrompt').innerHTML = renderColoredCmd(item.cmd);
+  document.getElementById('readFeedback').textContent = '';
+  document.getElementById('readFeedback').className = 'feedback';
+
+  const container = document.getElementById('readChoices');
+  container.innerHTML = '';
+  const shuffled = shuffleChoices(item.choices, item.answer);
+  shuffled.forEach(({text, isCorrect}) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = text;
+    btn.onclick = () => handleReadChoice(btn, isCorrect, container);
+    container.appendChild(btn);
+  });
+}
+
+function handleReadChoice(btn, isCorrect, container) {
+  Array.from(container.children).forEach(b => b.onclick = null);
+  const fb = document.getElementById('readFeedback');
+  if (isCorrect) {
+    btn.className += ' correct-choice';
+    fb.textContent = '✓ Correct!';
+    fb.className = 'feedback ok';
+    state.streak++;
+    state.totalCorrect++;
+    addXP(8);
+    heroAttack();
+  } else {
+    btn.className += ' wrong-choice';
+    // highlight correct
+    Array.from(container.children).forEach(b => {
+      if (b !== btn && b.dataset.correct === 'true') b.className += ' correct-choice';
+    });
+    fb.textContent = '✗ Not quite.';
+    fb.className = 'feedback err';
+    state.streak = 0;
+  }
+  state.totalAnswered++;
+  saveState();
+  currentIdx++;
+  setTimeout(showReadModeStep, 1100);
+}
+
+// mark correct btn
+function shuffleChoices(choices, correctIdx) {
+  const arr = choices.map((text, i) => ({text, isCorrect: i === correctIdx}));
+  for (let i = arr.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+// ─── COMBAT ───
+let combatTimerInterval = null;
+let combatPool = [];
+let combatWave = 0;
+let combatLives = 3;
+let combatEnemyHp = 5;
+let combatCorrect = 0;
+
+function startCombat() {
+  currentPhase = 'combat';
+  combatWave = 1;
+  combatLives = 3;
+  combatEnemyHp = 5;
+  combatCorrect = 0;
+  enemyHpPct = 1;
+  enemyState = 'idle';
+  bossMode = false;
+
+  // Pull combat items from this group + earlier groups
+  const maxGroup = currentGroup.id;
+  combatPool = COMBAT_POOL.filter(c => c.group <= maxGroup);
+
+  showScreen('scCombat');
+  document.getElementById('combatCrumb').innerHTML = `// <span>${currentGroup.name}</span> — Combat`;
+  showCombatWave();
+}
+
+function showCombatWave() {
+  if (combatWave > 10) {
+    // Victory — move to boss
+    state.groupProgress[currentGroup.id].phase = 'boss';
+    saveState();
+    startBoss();
+    return;
+  }
+  if (combatLives <= 0) {
+    showCombatFail();
+    return;
+  }
+
+  document.getElementById('waveNum').textContent = combatWave;
+  document.getElementById('livesLeft').textContent = '❤'.repeat(combatLives);
+
+  // Pick a random item from pool (harder as waves increase)
+  const eligible = combatPool.filter(c => c.group <= Math.min(currentGroup.id, Math.floor(combatWave / 2)));
+  const pool = eligible.length ? eligible : combatPool;
+  const item = pool[Math.floor(Math.random() * pool.length)];
+
+  // Build choices (1 correct + 3 random wrong)
+  const wrong = combatPool.filter(c => c !== item).sort(() => Math.random()-0.5).slice(0,3);
+  const choices = shuffleChoices(
+    [item.desc, ...wrong.map(w => w.desc)],
+    0
+  );
+
+  document.getElementById('combatPrompt').innerHTML = renderColoredCmd(item.cmd);
+  document.getElementById('combatFeedback').textContent = '';
+
+  const container = document.getElementById('combatChoices');
+  container.innerHTML = '';
+  choices.forEach(({text, isCorrect}) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.textContent = text;
+    btn.onclick = () => handleCombatChoice(btn, isCorrect, container);
+    container.appendChild(btn);
+  });
+
+  // Timer: 6 seconds, decreases with waves
+  const timeLimit = Math.max(3, 7 - Math.floor(combatWave/3));
+  if (combatTimerInterval) clearInterval(combatTimerInterval);
+  let t = timeLimit;
+  const canvas = document.getElementById('combatTimer');
+  drawTimer(canvas, t, timeLimit);
+  combatTimerInterval = setInterval(() => {
+    t--;
+    drawTimer(canvas, t, timeLimit);
+    if (t <= 0) {
+      clearInterval(combatTimerInterval);
+      handleCombatChoice(null, false, container);
+    }
+  }, 1000);
+}
+
+function handleCombatChoice(btn, isCorrect, container) {
+  clearInterval(combatTimerInterval);
+  Array.from(container.children).forEach(b => b.onclick = null);
+  const fb = document.getElementById('combatFeedback');
+
+  if (isCorrect) {
+    if (btn) btn.className += ' correct-choice';
+    fb.textContent = '✓ Hit!';
+    fb.className = 'feedback ok';
+    state.streak++;
+    addXP(12);
+    combatCorrect++;
+    combatEnemyHp--;
+    enemyHpPct = Math.max(0, combatEnemyHp / 5);
+    document.getElementById('enemyHp').style.width = (enemyHpPct*100)+'%';
+    heroAttack();
+    enemyHurt();
+    if (combatEnemyHp <= 0) {
+      combatEnemyHp = 5;
+      enemyHpPct = 1;
+      document.getElementById('enemyHp').style.width = '100%';
+    }
+  } else {
+    if (btn) btn.className += ' wrong-choice';
+    fb.textContent = btn ? '✗ Miss!' : '⏰ Too slow!';
+    fb.className = 'feedback err';
+    state.streak = 0;
+    combatLives--;
+    document.getElementById('livesLeft').textContent = '❤'.repeat(Math.max(0, combatLives));
+    heroState = 'hurt';
+    setTimeout(() => heroState = 'idle', 400);
+  }
+  saveState();
+  combatWave++;
+  setTimeout(showCombatWave, 900);
+}
+
+function showCombatFail() {
+  state.groupProgress[currentGroup.id].phase = 'combat';
+  saveState();
+  showResult('DEFEATED', false, 'Run out of lives. Combat resets. The commands await your return.', 0,
+    [{label:'RETRY COMBAT', fn: startCombat}]);
+}
+
+// ─── BOSS ───
+let bossStepIdx = 0;
+
+function startBoss() {
+  currentPhase = 'boss';
+  bossStepIdx = 0;
+  bossMode = true;
+  enemyState = 'idle';
+  enemyHpPct = 1;
+
+  const boss = currentGroup.boss;
+  showScreen('scBoss');
+  document.getElementById('bossCrumb').innerHTML = `// <span>${currentGroup.name}</span> — BOSS`;
+  document.getElementById('bossTitle').textContent = `☠ BOSS: ${currentGroup.name}`;
+  document.getElementById('bossScenario').innerHTML = `<strong>Scenario:</strong> ${boss.scenario}`;
+
+  renderDots('bossDots', boss.steps.length, 0);
+  showBossStep();
+}
+
+function showBossStep() {
+  const boss = currentGroup.boss;
+  if (bossStepIdx >= boss.steps.length) {
+    // Boss defeated!
+    enemyDie();
+    bossMode = false;
+    state.groupProgress[currentGroup.id].complete = true;
+    state.groupProgress[currentGroup.id].phase = 'done';
+    addXP(100);
+    saveState();
+    showResult('GROUP COMPLETE!', true,
+      `${currentGroup.name} mastered. ${currentGroup.vocab.join(', ')} are now in your arsenal.`,
+      100, [
+        {label:'NEXT GROUP', fn: showGroupSelect},
+        {label:'GROUP SELECT', fn: showGroupSelect},
+      ]);
+    return;
+  }
+
+  const step = boss.steps[bossStepIdx];
+  document.getElementById('bossPrompt').textContent = step.prompt;
+  renderDots('bossDots', boss.steps.length, bossStepIdx);
+
+  const inp = document.getElementById('bossInput');
+  inp.value = '';
+  inp.className = '';
+  document.getElementById('bossFeedback').textContent = '';
+  inp.focus();
+  inp.onkeydown = (e) => { if (e.key === 'Enter') checkBossStep(step); };
+}
+
+function checkBossStep(step) {
+  const inp = document.getElementById('bossInput');
+  const val = inp.value.trim();
+  const fb = document.getElementById('bossFeedback');
+
+  if (val === step.answer) {
+    inp.className = 'correct';
+    fb.textContent = '✓ Correct — next step unlocked.';
+    fb.className = 'feedback ok';
+    state.streak++;
+    addXP(20);
+    heroAttack();
+    enemyHpPct = Math.max(0, 1 - ((bossStepIdx+1) / currentGroup.boss.steps.length));
+    bossStepIdx++;
+    renderDots('bossDots', currentGroup.boss.steps.length, bossStepIdx);
+    setTimeout(showBossStep, 800);
+  } else {
+    inp.className = 'wrong';
+    fb.innerHTML = `✗ Not quite. <span style="color:var(--dim);font-size:0.75rem">Keep trying — no penalty, boss fights are learning moments.</span>`;
+    fb.className = 'feedback err';
+    state.streak = 0;
+    saveState();
+    setTimeout(() => { inp.className=''; inp.value=''; }, 500);
+  }
+}
+
+// ─── PHASE RESULTS ───
+function showPhaseResult(phase, pct) {
+  if (phase === 'practice1') {
+    showResult('PRACTICE 1 DONE', true,
+      'All lessons complete. Practice 2 reinforces the same commands — repetition is how muscle memory forms.',
+      20, [{label:'PRACTICE 2', fn: () => startPractice('practice2')}]);
+  } else if (phase === 'test-pass') {
+    showResult(`TEST PASSED — ${pct}%`, true,
+      'Accuracy good enough to advance. "What does this do?" mode next — reading comprehension, not typing.',
+      30, [{label:'READ MODE →', fn: startReadMode}]);
+  } else if (phase === 'test-fail') {
+    showResult(`TEST FAILED — ${pct}%`, false,
+      'Below 60%. The commands haven\'t landed yet. Retry Practice 2 to reinforce before testing again.',
+      0, [{label:'RETRY PRACTICE 2', fn: () => startPractice('practice2')}]);
+  }
+}
+
+function showResult(title, pass, msg, xp, buttons) {
+  showScreen('scResult');
+  const t = document.getElementById('resultTitle');
+  t.textContent = title;
+  t.className = 'result-title ' + (pass ? 'result-ok' : 'result-fail');
+  document.getElementById('resultMsg').textContent = msg;
+  document.getElementById('resultXP').textContent = xp > 0 ? `+${xp} XP` : '';
+  document.getElementById('resultStats').textContent =
+    `Accuracy: ${state.totalAnswered > 0 ? Math.round(state.totalCorrect/state.totalAnswered*100) : 0}% overall | Streak: ${state.streak}`;
+  document.getElementById('resultExplain').style.display = 'none';
+
+  const btnRow = document.getElementById('resultButtons');
+  btnRow.innerHTML = '';
+  buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-green';
+    btn.textContent = b.label;
+    btn.onclick = b.fn;
+    btnRow.appendChild(btn);
+  });
+
+  const back = document.createElement('button');
+  back.className = 'btn';
+  back.textContent = 'GROUP SELECT';
+  back.onclick = showGroupSelect;
+  btnRow.appendChild(back);
+}
+
+// ═══════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════
+function renderColoredCmd(cmd) {
+  // Tokenize and color: command, flag, arg, pipe, redirect
+  const tokens = cmd.split(' ');
+  return tokens.map((tok, i) => {
+    if (tok === '|') return `<span class="t-pipe">|</span>`;
+    if (tok === '>' || tok === '>>') return `<span class="t-redir">${tok}</span>`;
+    if (tok === '2>/dev/null' || tok.startsWith('2>')) return `<span class="t-redir">${tok}</span>`;
+    if (tok === '&&' || tok === '||' || tok === ';') return `<span class="t-pipe">${tok}</span>`;
+    if (i === 0 || (i > 0 && (tokens[i-1] === '|' || tokens[i-1] === '&&' || tokens[i-1] === '||'))) {
+      return `<span class="t-cmd">${tok}</span>`;
+    }
+    if (tok.startsWith('-') || tok.startsWith('+x') || tok.startsWith('+')) {
+      return `<span class="t-flag">${tok}</span>`;
+    }
+    return `<span class="t-arg">${tok}</span>`;
+  }).join(' ');
+}
+
+function renderPrompt(cmd) {
+  document.getElementById('promptTarget').innerHTML = renderColoredCmd(cmd);
+}
+
+function renderDots(containerId, total, current) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i < current ? ' done' : i === current ? ' cur' : '');
+    container.appendChild(d);
+  }
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+loadState();
+</script>
+</body>
+</html>

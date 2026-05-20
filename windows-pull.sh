@@ -4,11 +4,11 @@
 # Pulls selected data from Windows NVME (nvme1n1p3) to ~/fossome/windows-local
 #
 # Prerequisites:
-#   - Windows NVME mounted read-only at /mnt/windows
+#   - Windows NVME mounted read-only at /var/mnt/windows
 #   - ~/fossome/windows-local exists
 #
 # Mount command (if not already mounted):
-#   sudo mount -o ro /dev/nvme1n1p3 /mnt/windows
+#   sudo mount -o ro /dev/nvme1n1p3 /var/mnt/windows
 #
 # Run inside tmux:
 #   tmux new-session -s windows-pull
@@ -20,11 +20,11 @@ DEST=~/fossome/windows-local
 echo "=== Windows pull started: $(date) ===" | tee -a "$LOG"
 
 SOURCES=(
-    "/mnt/windows/Users/Tom|$DEST/Users-Tom"
-    "/mnt/windows/home/Tino|$DEST/home-Tino"
-    "/mnt/windows/!Archives|$DEST/Archives"
-    "/mnt/windows/!Scripts|$DEST/Scripts"
-    "/mnt/windows/!Logs|$DEST/Logs"
+    "/var/mnt/windows/Users/Tom|$DEST/Users-Tom"
+    "/var/mnt/windows/home/Tino|$DEST/home-Tino"
+    "/var/mnt/windows/!Archives|$DEST/Archives"
+    "/var/mnt/windows/!Scripts|$DEST/Scripts"
+    "/var/mnt/windows/!Logs|$DEST/Logs"
 )
 
 for entry in "${SOURCES[@]}"; do
